@@ -146,6 +146,53 @@ function nextRenderId(): string {
   return `askmymd-mermaid-${mermaidRenderId}`;
 }
 
+function addCodeCopyButtons(container: HTMLElement) {
+  const pres = Array.from(container.querySelectorAll("pre"));
+  pres.forEach((pre) => {
+    const code = pre.querySelector("code");
+    if (!code) return;
+    if (code.classList.contains("language-mermaid")) return;
+    if (pre.querySelector(".code-copy-btn")) return;
+    const codeText = (code.textContent ?? "").replace(/\n$/, "");
+    if (!codeText.trim()) return;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "code-copy-btn";
+    btn.setAttribute("aria-label", "Copy code");
+    btn.innerHTML =
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v3"></path></svg><span>Copy</span>';
+    let timeout: number | undefined;
+    btn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(codeText);
+      } catch {
+        const ta = document.createElement("textarea");
+        ta.value = codeText;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+          document.execCommand("copy");
+        } catch {}
+        document.body.removeChild(ta);
+      }
+      const original = btn.innerHTML;
+      btn.classList.add("copied");
+      btn.innerHTML =
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Copied</span>';
+      btn.setAttribute("aria-label", "Copied");
+      clearTimeout(timeout);
+      timeout = window.setTimeout(() => {
+        btn.classList.remove("copied");
+        btn.innerHTML = original;
+        btn.setAttribute("aria-label", "Copy code");
+      }, 1500);
+    });
+    pre.appendChild(btn);
+  });
+}
+
 /**
  * Patch mindmap central root node + light-mode dark fills.
  * Mermaid's root (section-0) was previously hardcoded to dark blue fill
@@ -360,6 +407,8 @@ export default function Preview({ content, isDark }: PreviewProps) {
 
     const html = marked.parse(content) as string;
     el.innerHTML = DOMPurify.sanitize(html);
+
+    addCodeCopyButtons(el);
 
     // marked emits ```mermaid as <pre><code class="language-mermaid">.
     const blocks = Array.from(el.querySelectorAll("pre > code.language-mermaid"));

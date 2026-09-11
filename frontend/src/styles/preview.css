@@ -126,9 +126,12 @@
   border: 1px solid #e5e7eb;
   border-radius: 6px;
   padding: 1rem;
+  padding-top: 2.5rem;
   overflow-x: auto;
   margin: 1rem 0;
   line-height: 1.6;
+  font-size: 14px;
+  position: relative;
 }
 .preview-container.light pre code {
   background-color: transparent;
@@ -403,14 +406,66 @@
   border: 1px solid #334155;
   border-radius: 6px;
   padding: 1rem;
+  padding-top: 2.5rem;
   overflow-x: auto;
   margin: 1rem 0;
   line-height: 1.6;
+  font-size: 14px;
+  position: relative;
 }
 .preview-container.dark pre code {
   background-color: transparent;
   color: #cbd5e1;
   padding: 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.preview-container.light pre code {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+/* Code block copy button — top-right, does not overlap text */
+.code-copy-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  font-size: 12px;
+  line-height: 1;
+  border-radius: 4px;
+  border: 1px solid;
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.15s, background-color 0.15s, color 0.15s;
+  font-family: 'Inter', Arial, Helvetica, sans-serif;
+  z-index: 1;
+}
+.code-copy-btn:hover {
+  opacity: 1;
+}
+.preview-container.light .code-copy-btn {
+  background: #ffffff;
+  border-color: #e5e7eb;
+  color: #374151;
+}
+.preview-container.light .code-copy-btn:hover {
+  background: #f3f4f6;
+}
+.preview-container.dark .code-copy-btn {
+  background: #1e293b;
+  border-color: #475569;
+  color: #e2e8f0;
+}
+.preview-container.dark .code-copy-btn:hover {
+  background: #334155;
+}
+.code-copy-btn.copied {
+  color: #10b981 !important;
+  border-color: #10b981 !important;
 }
 
 .preview-container.dark blockquote {
