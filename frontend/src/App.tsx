@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import ChatPanel from "./components/ChatPanel";
 import Editor from "./components/Editor";
+import FormattingToolbar from "./components/FormattingToolbar";
 import Header from "./components/Header";
 import Preview from "./components/Preview";
 import ResizableSplit from "./components/ResizableSplit";
@@ -15,6 +16,7 @@ import {
 
 export default function App() {
   const [markdown, setMarkdown] = useState<string>(() => loadStoredMarkdown());
+  const editorRef = useRef<HTMLTextAreaElement>(null);
   const [docError, setDocError] = useState<string | null>(null);
   // Chat lives in a slide-in drawer; hidden until the header button opens it.
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -59,6 +61,7 @@ export default function App() {
         isDark={isDark}
         onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
       />
+      <FormattingToolbar editorRef={editorRef} value={markdown} onChange={setMarkdown} isDark={isDark} />
       {docError && (
         <div className={`flex items-center justify-between gap-3 border-b px-6 py-2 text-sm ${isDark ? "border-red-900/60 bg-red-950/60 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>
           <span>{docError}</span>
@@ -77,7 +80,7 @@ export default function App() {
       <main className={`flex flex-1 ${isDark ? "bg-slate-950" : "bg-white"}`}>
         <ResizableSplit
           isDark={isDark}
-          left={<Editor value={markdown} onChange={setMarkdown} isDark={isDark} />}
+          left={<Editor value={markdown} onChange={setMarkdown} isDark={isDark} editorRef={editorRef} />}
           right={<Preview content={markdown} isDark={isDark} />}
         />
       </main>
