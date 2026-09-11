@@ -26,7 +26,7 @@ export default function Editor({ value, onChange, isDark, editorRef }: EditorPro
   }
 
   return (
-    <div className={`flex h-full flex-col border-r ${isDark ? "border-slate-800 bg-slate-950" : "border-gray-200 bg-white"}`}>
+    <div className={`flex h-full min-h-0 flex-col border-r ${isDark ? "border-slate-800 bg-slate-950" : "border-gray-200 bg-white"}`}>
       <div className={`flex items-center justify-between border-b px-4 py-2 ${isDark ? "border-slate-800 bg-slate-950" : "border-gray-200 bg-white"}`}>
         <span className={`text-sm font-semibold tracking-wide uppercase ${isDark ? "text-slate-400" : "text-gray-500"}`}>
           Editor
@@ -54,7 +54,7 @@ export default function Editor({ value, onChange, isDark, editorRef }: EditorPro
         onChange={(e) => onChange(e.target.value)}
         placeholder="Paste or type markdown here, or upload a .md file…"
         spellCheck={false}
-        className={`h-full w-full flex-1 resize-none p-4 font-mono text-sm focus:outline-none ${isDark ? "bg-slate-950 text-slate-200 placeholder:text-slate-600" : "bg-white text-gray-900 placeholder:text-gray-400"}`}
+        className={`min-h-0 w-full flex-1 resize-none overflow-auto p-4 font-mono text-sm focus:outline-none ${isDark ? "bg-slate-950 text-slate-200 placeholder:text-slate-600" : "bg-white text-gray-900 placeholder:text-gray-400"}`}
       />
     </div>
   );

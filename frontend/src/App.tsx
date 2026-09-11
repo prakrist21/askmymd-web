@@ -53,7 +53,7 @@ export default function App() {
   const isDark = theme === "dark";
 
   return (
-    <div className={`flex min-h-screen flex-col ${isDark ? "bg-slate-950 text-slate-100" : "bg-white text-slate-900"}`}>
+    <div className={`flex h-screen min-h-0 flex-col overflow-hidden ${isDark ? "bg-slate-950 text-slate-100" : "bg-white text-slate-900"}`}>
       <Header
         chatReady={chatReady}
         chatOpen={drawerOpen}
@@ -77,7 +77,7 @@ export default function App() {
 
       {/* Editor + Preview fill the full width; the chat is no longer a
            permanent sidebar. */}
-      <main className={`flex flex-1 ${isDark ? "bg-slate-950" : "bg-white"}`}>
+      <main className={`flex min-h-0 flex-1 ${isDark ? "bg-slate-950" : "bg-white"}`}>
         <ResizableSplit
           isDark={isDark}
           left={<Editor value={markdown} onChange={setMarkdown} isDark={isDark} editorRef={editorRef} />}

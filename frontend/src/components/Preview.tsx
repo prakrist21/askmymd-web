@@ -513,15 +513,15 @@ export default function Preview({ content, isDark }: PreviewProps) {
   }, [content, theme, isDark]);
 
   return (
-    <div className={`flex flex-col ${isDark ? "bg-slate-950" : "bg-white"}`}>
-      <div className={`sticky top-14 z-10 border-b px-4 py-2 ${isDark ? "border-slate-800 bg-slate-950" : "border-gray-200 bg-white"}`}>
+    <div className={`flex h-full min-h-0 flex-col ${isDark ? "bg-slate-950" : "bg-white"}`}>
+      <div className={`shrink-0 border-b px-4 py-2 ${isDark ? "border-slate-800 bg-slate-950" : "border-gray-200 bg-white"}`}>
         <span className={`text-sm font-semibold tracking-wide uppercase ${isDark ? "text-slate-400" : "text-gray-500"}`}>
           Preview
         </span>
       </div>
       <div
         ref={previewRef}
-        className={`preview-container markdown-body ${isDark ? "dark" : "light"}`}
+        className={`preview-container min-h-0 flex-1 overflow-auto markdown-body ${isDark ? "dark" : "light"}`}
       />
     </div>
   );

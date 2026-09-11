@@ -51,9 +51,9 @@ export default function ResizableSplit({ left, right, isDark }: ResizableSplitPr
   }, [isDragging, updateFromPointer]);
 
   return (
-    <div ref={containerRef} className="flex flex-1">
+    <div ref={containerRef} className="flex min-h-0 flex-1">
       <div
-        className="min-w-0 overflow-hidden"
+        className="min-h-0 min-w-0 overflow-hidden"
         style={{ width: `${fraction * 100}%` }}
       >
         {left}
@@ -75,7 +75,7 @@ export default function ResizableSplit({ left, right, isDark }: ResizableSplitPr
           isDragging ? "bg-emerald-500" : ""
         }`}
       />
-      <div className="min-w-0 flex-1 overflow-visible">{right}</div>
+      <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{right}</div>
     </div>
   );
 }
