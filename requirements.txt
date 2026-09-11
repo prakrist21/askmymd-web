@@ -1,0 +1,4 @@
+# Root requirements — delegates to backend/requirements.txt
+# Install with: pip install -r requirements.txt  (from repo root)
+# or: pip install -r backend/requirements.txt   (from backend folder)
+-r backend/requirements.txt

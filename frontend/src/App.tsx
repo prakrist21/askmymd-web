@@ -1,0 +1,119 @@
+import { useEffect, useState } from "react";
+import ChatPanel from "./components/ChatPanel";
+import Editor from "./components/Editor";
+import Header from "./components/Header";
+import Preview from "./components/Preview";
+import ResizableSplit from "./components/ResizableSplit";
+import {
+  loadStoredDocumentId,
+  loadStoredMarkdown,
+  loadStoredPrepared,
+  loadStoredTheme,
+  saveMarkdown,
+  saveTheme,
+} from "./storage";
+
+export default function App() {
+  const [markdown, setMarkdown] = useState<string>(() => loadStoredMarkdown());
+  const [docError, setDocError] = useState<string | null>(null);
+  // Chat lives in a slide-in drawer; hidden until the header button opens it.
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  // Mirrors ChatPanel's readiness so the header Chat button can be
+  // emerald-when-ready / gray-when-idle. Initialized from storage so the
+  // color is correct on first paint after a refresh.
+  const [chatReady, setChatReady] = useState<boolean>(
+    () => loadStoredPrepared() && !!loadStoredMarkdown().trim()
+  );
+  // Preview theme (dark default). The app chrome stays dark; this drives
+  // the preview surface + mermaid palette and persists across refreshes.
+  const [theme, setTheme] = useState<"dark" | "light">(() => loadStoredTheme());
+  const [documentId] = useState<string | null>(() => loadStoredDocumentId());
+
+  useEffect(() => {
+    saveTheme(theme);
+  }, [theme]);
+
+  // Persist the document so a refresh restores the editor.
+  useEffect(() => {
+    saveMarkdown(markdown);
+  }, [markdown]);
+
+  // Escape closes the drawer.
+  useEffect(() => {
+    if (!drawerOpen) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setDrawerOpen(false);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [drawerOpen]);
+
+  const isDark = theme === "dark";
+
+  return (
+    <div className={`flex min-h-screen flex-col ${isDark ? "bg-slate-950 text-slate-100" : "bg-white text-slate-900"}`}>
+      <Header
+        chatReady={chatReady}
+        chatOpen={drawerOpen}
+        onToggleChat={() => setDrawerOpen((o) => !o)}
+        isDark={isDark}
+        onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+      />
+      {docError && (
+        <div className={`flex items-center justify-between gap-3 border-b px-6 py-2 text-sm ${isDark ? "border-red-900/60 bg-red-950/60 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>
+          <span>{docError}</span>
+          <button
+            type="button"
+            onClick={() => setDocError(null)}
+            className={`shrink-0 rounded px-2 py-0.5 text-xs ${isDark ? "text-red-300 hover:bg-red-900/60 hover:text-red-100" : "text-red-600 hover:bg-red-100 hover:text-red-800"}`}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Editor + Preview fill the full width; the chat is no longer a
+           permanent sidebar. */}
+      <main className={`flex flex-1 ${isDark ? "bg-slate-950" : "bg-white"}`}>
+        <ResizableSplit
+          isDark={isDark}
+          left={<Editor value={markdown} onChange={setMarkdown} isDark={isDark} />}
+          right={<Preview content={markdown} isDark={isDark} />}
+        />
+      </main>
+
+      {/* Chat drawer: dimmed backdrop + sliding panel. The panel stays
+          mounted (chat state survives open/close) but is inert and
+          translated off-screen while closed. Sits below the h-14 header. */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-0 top-14 z-40">
+        <div
+          onClick={() => setDrawerOpen(false)}
+          aria-hidden="true"
+          className={`absolute inset-0 transition-opacity duration-300 ${isDark ? "bg-slate-950/60" : "bg-gray-900/30"} ${
+            drawerOpen
+              ? "pointer-events-auto opacity-100"
+              : "pointer-events-none opacity-0"
+          }`}
+        />
+        <section
+          id="chat-drawer"
+          aria-label="Chat"
+          aria-hidden={!drawerOpen}
+          inert={!drawerOpen}
+          className={`pointer-events-auto absolute bottom-0 right-0 top-0 w-96 border-l shadow-2xl transition-transform duration-300 ${isDark ? "border-slate-800 bg-slate-900" : "border-gray-200 bg-white"} ${
+            drawerOpen ? "translate-x-0" : "translate-x-full"
+          }`}
+        >
+          <ChatPanel
+            markdown={markdown}
+            documentId={documentId}
+            onDocError={setDocError}
+            onClose={() => setDrawerOpen(false)}
+            onReadyChange={setChatReady}
+            isDark={isDark}
+          />
+        </section>
+      </div>
+    </div>
+  );
+}

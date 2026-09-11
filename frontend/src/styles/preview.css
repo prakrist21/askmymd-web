@@ -1,0 +1,852 @@
+/*
+ * Preview styling for the marked + github-markdown-css pipeline.
+ *
+ * Import order matters: this file is imported AFTER
+ * `github-markdown-dark.css` in Preview.tsx, so equal-specificity rules
+ * here win the cascade. Every theme-scoped rule below uses the
+ * `.preview-container.light` / `.preview-container.dark` compound
+ * selector (specificity 0,2,x), which outranks the library's
+ * `.markdown-body …` element rules (0,1,x) in BOTH themes — that is
+ * what keeps the library's always-dark table chrome from leaking into
+ * light mode.
+ *
+ * Palette contract: dark = slate ramp (slate-950 surface, slate-50/100
+ * loudest text, slate-300 body, emerald accents); light = gray ramp
+ * (white surface, gray-900/800 headings, gray-700 body, same emerald
+ * accents). Code surfaces are always tinted relative to their container.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+/* ---- Shared layout (theme-independent) ---- */
+.preview-container {
+  padding: 2rem;
+  /* Diagram / flowchart should expand to natural height — no internal
+     scrollbar on the preview pane's content container. The outer page/pane
+     scrolls if the diagram is long. */
+  overflow: visible;
+  height: auto;
+  min-height: auto;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu",
+    "Cantarell", "Fira Sans", "Droid Sans", "Source Sans Pro", sans-serif;
+  overflow-wrap: break-word;
+}
+
+/* GFM task lists: dim unchecked, strike completed. marked does not add a
+   task-list-item class (GitHub does), so select via the checkbox. */
+.preview-container li:has(> input[type="checkbox"]) {
+  list-style: none;
+}
+.preview-container li:has(> input[type="checkbox"]:checked) {
+  color: #64748b;
+  text-decoration: line-through;
+}
+.preview-container li > input[type="checkbox"] {
+  margin-right: 0.5rem;
+  accent-color: #10b981;
+}
+
+.preview-container del {
+  color: #94a3b8;
+}
+
+/* ==================================================================== */
+/* LIGHT MODE                                                           */
+/* ==================================================================== */
+.preview-container.light {
+  background-color: #ffffff;
+  color: #1f2937;
+}
+
+.preview-container.light h1,
+.preview-container.light h2,
+.preview-container.light h3,
+.preview-container.light h4,
+.preview-container.light h5,
+.preview-container.light h6 {
+  color: #000000;
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+}
+.preview-container.light h1 {
+  font-size: 2.5rem;
+  border-bottom: 2px solid #d1d5db;
+  padding-bottom: 0.5rem;
+}
+/* github-dark paints h2 (and deeper) with a dark border-bottom; light
+   mode wants the flat look the prompt specifies. */
+.preview-container.light h2 {
+  font-size: 2rem;
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.preview-container.light h3 {
+  font-size: 1.5rem;
+}
+
+.preview-container.light p {
+  line-height: 1.8;
+  margin: 1rem 0;
+  color: #374151;
+}
+
+.preview-container.light ul,
+.preview-container.light ol {
+  margin: 1rem 0;
+  padding-left: 2rem;
+}
+.preview-container.light ul {
+  list-style-type: disc;
+}
+.preview-container.light ol {
+  list-style-type: decimal;
+}
+.preview-container.light li {
+  line-height: 1.8;
+  margin: 0.5rem 0;
+  color: #374151;
+}
+.preview-container.light li::marker {
+  color: #6b7280;
+}
+.preview-container.dark li::marker {
+  color: #94a3b8;
+}
+
+.preview-container.light code {
+  background-color: #f3f4f6;
+  color: #1f2937;
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+  font-family: "Monaco", "Courier New", monospace;
+  font-size: 0.9em;
+}
+.preview-container.light pre {
+  background-color: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+  line-height: 1.6;
+}
+.preview-container.light pre code {
+  background-color: transparent;
+  color: #1f2937;
+  padding: 0;
+}
+
+.preview-container.light blockquote {
+  border-left: 4px solid #10b981;
+  padding-left: 1rem;
+  margin: 1rem 0;
+  color: #059669;
+  font-style: italic;
+}
+.preview-container.light blockquote p {
+  margin: 0.5rem 0;
+}
+
+/* Table — theme-aware, replaces hardcoded dark navy (general, all tables) */
+.preview-container table {
+  width: fit-content !important;
+  border-collapse: separate !important;
+  border-spacing: 0 !important;
+  margin: 1.5rem 0 !important;
+  max-width: 100% !important;
+  background-color: #1e293b !important;
+  border: 1px solid #334155 !important;
+  border-radius: 10px !important;
+  overflow: hidden !important;
+  font-family: 'Inter', Arial, Helvetica, sans-serif !important;
+  table-layout: fixed !important;
+}
+/* Light: use app's light surface (cards/panels use #ffffff) */
+.preview-container.light table {
+  background-color: #ffffff !important;
+  border-color: #e5e7eb !important;
+}
+/* Dark: use app's dark surface (cards/panels use #1e293b / #0f172a) */
+.preview-container.dark table {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+.preview-container thead {
+  background-color: transparent !important;
+}
+.preview-container th {
+  background-color: #f0fdfa !important;
+  color: #000000 !important;
+  padding: 0.875rem 1rem !important;
+  text-align: left !important;
+  font-weight: 700 !important;
+  border: none !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+  border-right: 0.5px solid rgba(0, 0, 0, 0.06) !important;
+  font-family: 'Inter', Arial, Helvetica, sans-serif !important;
+}
+.preview-container th:last-child {
+  border-right: none !important;
+}
+.preview-container.dark th {
+  background-color: #f0fdfa !important;
+  color: #000000 !important;
+  border-right: 0.5px solid rgba(0, 0, 0, 0.06) !important;
+}
+
+
+.preview-container td {
+  padding: 0.75rem 1rem !important;
+  border: none !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+  border-right: 0.5px solid rgba(0, 0, 0, 0.06) !important;
+  font-family: 'Inter', Arial, Helvetica, sans-serif !important;
+  text-align: left !important;
+}
+.preview-container td:last-child {
+  border-right: none !important;
+}
+.preview-container.light td {
+  color: #000000 !important;
+  background-color: transparent !important;
+  border-bottom: 1px solid #f1f5f9 !important;
+  border-right: 0.5px solid rgba(0, 0, 0, 0.06) !important;
+}
+.preview-container.light td:last-child {
+  border-right: none !important;
+}
+.preview-container.dark td {
+  color: #e2e8f0 !important;
+  background-color: transparent !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  border-right: 0.5px solid rgba(255, 255, 255, 0.06) !important;
+}
+.preview-container.dark td:last-child {
+  border-right: none !important;
+}
+/* Left column — same as other cells (first element is td, not th — no bold) */
+.preview-container td:first-child {
+  color: #000000 !important;
+  font-weight: 400 !important;
+  background-color: transparent !important;
+}
+.preview-container.light td:first-child {
+  color: #000000 !important;
+  font-weight: 400 !important;
+  background-color: transparent !important;
+}
+.preview-container.dark td:first-child {
+  color: #e2e8f0 !important;
+  font-weight: 400 !important;
+  background-color: transparent !important;
+}
+/* Right column (Purpose) — secondary text */
+.preview-container td:last-child {
+  font-weight: 400 !important;
+}
+.preview-container.light td:last-child {
+  color: #000000 !important;
+}
+.preview-container.dark td:last-child {
+  color: #94a3b8 !important;
+}
+.preview-container tr:last-child td {
+  border-bottom: none !important;
+}
+.preview-container tbody tr:hover td {
+  background-color: rgba(255, 255, 255, 0.04) !important;
+}
+.preview-container.light tbody tr:hover td {
+  background-color: #f8fafc !important;
+}
+.preview-container tr {
+  background-color: transparent !important;
+}
+/* Wrapper around table — fits table exactly, no extra border/empty gap */
+.preview-container div:has(> table) {
+  width: fit-content !important;
+  max-width: 100% !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  margin: 1.5rem 0 !important;
+  background: transparent !important;
+}
+
+.preview-container.light a {
+  color: #059669;
+  text-decoration: none;
+}
+.preview-container.light a:hover {
+  text-decoration: underline;
+  color: #10b981;
+}
+
+.preview-container.light strong {
+  color: #000000;
+  font-weight: 700;
+}
+.preview-container.light em {
+  color: #374151;
+  font-style: italic;
+}
+
+.preview-container.light hr {
+  border: 0;
+  border-top: 2px solid #e5e7eb;
+  margin: 2rem 0;
+}
+
+/* Mermaid containers — light variant. Expands to natural height, no internal scrollbar. */
+.preview-container.light .askmymd-mermaid {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  background-color: #ffffff;
+  border: 2px solid #d1d5db;
+  border-radius: 6px;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+  height: auto;
+  overflow: visible;
+}
+.preview-container.light .askmymd-mermaid[data-state="loading"] {
+  min-height: 120px;
+}
+.preview-container.light .askmymd-mermaid svg {
+  width: 100%;
+  height: auto;
+}
+
+/* Alias for spec compatibility — .mermaid selector (basic container only) */
+.preview-container.light .mermaid {
+  display: flex;
+  justify-content: center;
+  background-color: #ffffff;
+  border: 2px solid #d1d5db;
+  border-radius: 6px;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+  height: auto;
+  overflow: visible;
+}
+
+.preview-container.light .mermaid svg {
+  width: 100%;
+  height: auto;
+}
+
+/* ==================================================================== */
+/* DARK MODE                                                            */
+/* ==================================================================== */
+.preview-container.dark {
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
+
+.preview-container.dark h1,
+.preview-container.dark h2,
+.preview-container.dark h3,
+.preview-container.dark h4,
+.preview-container.dark h5,
+.preview-container.dark h6 {
+  color: #f1f5f9;
+  margin-top: 1.5rem;
+  margin-bottom: 1rem;
+}
+.preview-container.dark h1 {
+  font-size: 2.5rem;
+  border-bottom: 2px solid #475569;
+  padding-bottom: 0.5rem;
+}
+.preview-container.dark h2 {
+  font-size: 2rem;
+}
+.preview-container.dark h3 {
+  font-size: 1.5rem;
+}
+
+.preview-container.dark p {
+  line-height: 1.8;
+  margin: 1rem 0;
+  color: #cbd5e1;
+}
+
+.preview-container.dark ul,
+.preview-container.dark ol {
+  margin: 1rem 0;
+  padding-left: 2rem;
+}
+.preview-container.dark ul {
+  list-style-type: disc;
+}
+.preview-container.dark ol {
+  list-style-type: decimal;
+}
+.preview-container.dark li {
+  line-height: 1.8;
+  margin: 0.5rem 0;
+  color: #cbd5e1;
+}
+
+.preview-container.dark code {
+  background-color: #1e293b;
+  color: #e2e8f0;
+  padding: 0.2rem 0.4rem;
+  border-radius: 3px;
+  font-family: "Monaco", "Courier New", monospace;
+  font-size: 0.9em;
+}
+.preview-container.dark pre {
+  background-color: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 1rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+  line-height: 1.6;
+}
+.preview-container.dark pre code {
+  background-color: transparent;
+  color: #cbd5e1;
+  padding: 0;
+}
+
+.preview-container.dark blockquote {
+  border-left: 4px solid #10b981;
+  padding-left: 1rem;
+  margin: 1rem 0;
+  color: #a7f3d0;
+  font-style: italic;
+}
+.preview-container.dark blockquote p {
+  margin: 0.5rem 0;
+}
+
+
+
+
+
+.preview-container.dark a {
+  color: #10b981;
+  text-decoration: none;
+}
+.preview-container.dark a:hover {
+  text-decoration: underline;
+  color: #a7f3d0;
+}
+
+.preview-container.dark strong {
+  color: #f1f5f9;
+  font-weight: 700;
+}
+.preview-container.dark em {
+  color: #cbd5e1;
+  font-style: italic;
+}
+
+.preview-container.dark hr {
+  border: 0;
+  border-top: 2px solid #334155;
+  margin: 2rem 0;
+}
+
+/* Mermaid containers — dark variant. Expands to natural height, no internal scrollbar. */
+.preview-container.dark .askmymd-mermaid {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  background-color: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+  height: auto;
+  overflow: visible;
+}
+.preview-container.dark .askmymd-mermaid[data-state="loading"] {
+  min-height: 120px;
+}
+.preview-container.dark .askmymd-mermaid svg {
+  width: 100%;
+  height: auto;
+}
+
+/* Alias for spec compatibility — .mermaid selector (basic container only) */
+.preview-container.dark .mermaid {
+  display: flex;
+  justify-content: center;
+  background-color: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 1.5rem;
+  margin: 1.5rem 0;
+  height: auto;
+  overflow: visible;
+}
+
+.preview-container.dark .mermaid svg {
+  width: 100%;
+  height: auto;
+}
+
+/* ------------------------------------------------------------------ */
+/* Flowchart — rounded 8px, teal/coral accent, soft shadow, curved    */
+/* connectors, varied shape by node type (rect=action, polygon=diamond)*/
+/* Replaces flat lavender (#f3e8ff) with teal/coral family.           */
+/* ------------------------------------------------------------------ */
+.preview-container.light .askmymd-mermaid g.node rect,
+.preview-container.light .mermaid g.node rect,
+.preview-container.light .askmymd-mermaid g.node circle,
+.preview-container.light .mermaid g.node circle,
+.preview-container.light .askmymd-mermaid g.node ellipse,
+.preview-container.light .mermaid g.node ellipse,
+.preview-container.light .askmymd-mermaid g.cluster rect,
+.preview-container.light .mermaid g.cluster rect {
+  fill: #ccfbf1 !important;
+  stroke: #2dd4bf !important;
+  stroke-width: 1.2px !important;
+  rx: 8px !important;
+  ry: 8px !important;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.08));
+}
+
+.preview-container.light .askmymd-mermaid g.node polygon,
+.preview-container.light .mermaid g.node polygon {
+  fill: #ffe4e6 !important;
+  stroke: #fb7185 !important;
+  stroke-width: 1.2px !important;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.08));
+}
+
+.preview-container.light .askmymd-mermaid g.edgePath path.path,
+.preview-container.light .mermaid g.edgePath path.path,
+.preview-container.light .askmymd-mermaid path.flowchart-link,
+.preview-container.light .mermaid path.flowchart-link,
+.preview-container.light .askmymd-mermaid .edgePaths path,
+.preview-container.light .mermaid .edgePaths path {
+  stroke: #6b7280 !important;
+  stroke-width: 2px !important;
+  fill: none !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+}
+
+.preview-container.light .askmymd-mermaid g.node .label,
+.preview-container.light .mermaid g.node .label {
+  color: #134e4a !important;
+}
+.preview-container.light .askmymd-mermaid g.node polygon + g.label,
+.preview-container.light .mermaid g.node polygon + g.label {
+  color: #881337 !important;
+}
+
+.preview-container.dark .askmymd-mermaid g.node rect,
+.preview-container.dark .mermaid g.node rect,
+.preview-container.dark .askmymd-mermaid g.node circle,
+.preview-container.dark .mermaid g.node circle,
+.preview-container.dark .askmymd-mermaid g.node ellipse,
+.preview-container.dark .mermaid g.node ellipse,
+.preview-container.dark .askmymd-mermaid g.cluster rect,
+.preview-container.dark .mermaid g.cluster rect {
+  fill: #134e4a !important;
+  stroke: #2dd4bf !important;
+  stroke-width: 1.2px !important;
+  rx: 8px !important;
+  ry: 8px !important;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.35));
+}
+
+.preview-container.dark .askmymd-mermaid g.node polygon,
+.preview-container.dark .mermaid g.node polygon {
+  fill: #4a044e !important;
+  stroke: #fb7185 !important;
+  stroke-width: 1.2px !important;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.35));
+}
+
+.preview-container.dark .askmymd-mermaid g.node .label,
+.preview-container.dark .mermaid g.node .label {
+  color: #f0fdfa !important;
+}
+.preview-container.dark .askmymd-mermaid g.node polygon + g.label,
+.preview-container.dark .mermaid g.node polygon + g.label {
+  color: #ffe4e6 !important;
+}
+
+.preview-container.dark .askmymd-mermaid g.edgePath path.path,
+.preview-container.dark .mermaid g.edgePath path.path,
+.preview-container.dark .askmymd-mermaid path.flowchart-link,
+.preview-container.dark .mermaid path.flowchart-link,
+.preview-container.dark .askmymd-mermaid .edgePaths path,
+.preview-container.dark .mermaid .edgePaths path {
+  stroke: #9ca3af !important;
+  stroke-width: 2px !important;
+  fill: none !important;
+  stroke-linecap: round !important;
+  stroke-linejoin: round !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* Mindmap / diagram central root node — per-theme, not hardcoded     */
+/* The root was previously hardcoded to dark blue (#1e3a8a) with dark  */
+/* text, unreadable in light mode. Fix: per-theme pastel/mid-tone     */
+/* fills with proper contrast. Branch nodes already use light pastels   */
+/* correctly, so we only override the root (section-0).               */
+/* ------------------------------------------------------------------ */
+
+/* Light mode: soft pastel fill similar lightness to branch nodes      */
+/* (branch nodes = #f3e8ff / #fef3c7 / #cffafe). Root uses #ede9fe   */
+/* lavender pastel with dark text #1e293b for WCAG contrast.          */
+/* Targets section-root/section--1 (mermaid mindmap central node)     */
+/* and section-0 for compatibility.                                    */
+.preview-container.light .askmymd-mermaid .section-root rect,
+.preview-container.light .askmymd-mermaid .section-root circle,
+.preview-container.light .askmymd-mermaid .section-root path,
+.preview-container.light .askmymd-mermaid .section-root polygon,
+.preview-container.light .askmymd-mermaid g.section-root rect,
+.preview-container.light .askmymd-mermaid g.section-root circle,
+.preview-container.light .askmymd-mermaid g.section-root path,
+.preview-container.light .askmymd-mermaid g.section-root polygon,
+.preview-container.light .mermaid .section-root rect,
+.preview-container.light .mermaid .section-root circle,
+.preview-container.light .mermaid .section-root path,
+.preview-container.light .mermaid .section-root polygon,
+.preview-container.light .askmymd-mermaid .section--1 rect,
+.preview-container.light .askmymd-mermaid .section--1 circle,
+.preview-container.light .askmymd-mermaid .section--1 path,
+.preview-container.light .askmymd-mermaid .section--1 polygon,
+.preview-container.light .mermaid .section--1 rect,
+.preview-container.light .mermaid .section--1 circle,
+.preview-container.light .mermaid .section--1 path,
+.preview-container.light .mermaid .section--1 polygon,
+.preview-container.light .askmymd-mermaid .section-0 rect,
+.preview-container.light .askmymd-mermaid .section-0 circle,
+.preview-container.light .askmymd-mermaid .section-0 path,
+.preview-container.light .askmymd-mermaid g.section-0 rect,
+.preview-container.light .askmymd-mermaid g.section-0 circle,
+.preview-container.light .askmymd-mermaid g.section-0 path,
+.preview-container.light .mermaid .section-0 rect,
+.preview-container.light .mermaid .section-0 circle,
+.preview-container.light .mermaid .section-0 path,
+.preview-container.light .askmymd-mermaid [class*="section-root"] rect,
+.preview-container.light .askmymd-mermaid [class*="section-root"] circle,
+.preview-container.light .askmymd-mermaid [class*="section-root"] path,
+.preview-container.light .mermaid [class*="section-root"] rect,
+.preview-container.light .mermaid [class*="section-root"] circle,
+.preview-container.light .mermaid [class*="section-root"] path,
+.preview-container.light .askmymd-mermaid [class*="section--1"] rect,
+.preview-container.light .askmymd-mermaid [class*="section--1"] circle,
+.preview-container.light .askmymd-mermaid [class*="section--1"] path,
+.preview-container.light .mermaid [class*="section--1"] rect,
+.preview-container.light .mermaid [class*="section--1"] circle,
+.preview-container.light .mermaid [class*="section--1"] path {
+  fill: #ede9fe !important;
+  stroke: #a78bfa !important;
+}
+
+.preview-container.light .askmymd-mermaid .section-root text,
+.preview-container.light .askmymd-mermaid g.section-root text,
+.preview-container.light .mermaid .section-root text,
+.preview-container.light .askmymd-mermaid .section--1 text,
+.preview-container.light .askmymd-mermaid g.section--1 text,
+.preview-container.light .mermaid .section--1 text,
+.preview-container.light .askmymd-mermaid .section-0 text,
+.preview-container.light .askmymd-mermaid g.section-0 text,
+.preview-container.light .mermaid .section-0 text,
+.preview-container.light .askmymd-mermaid [class*="section-root"] text,
+.preview-container.light .mermaid [class*="section-root"] text,
+.preview-container.light .askmymd-mermaid [class*="section--1"] text,
+.preview-container.light .mermaid [class*="section--1"] text,
+.preview-container.light .askmymd-mermaid [class*="section-0"] text,
+.preview-container.light .mermaid [class*="section-0"] text,
+.preview-container.light .askmymd-mermaid .section-root foreignObject div,
+.preview-container.light .askmymd-mermaid g.section-root foreignObject div,
+.preview-container.light .mermaid .section-root foreignObject div,
+.preview-container.light .askmymd-mermaid .section--1 foreignObject div,
+.preview-container.light .askmymd-mermaid g.section--1 foreignObject div,
+.preview-container.light .mermaid .section--1 foreignObject div,
+.preview-container.light .askmymd-mermaid .section-0 foreignObject div,
+.preview-container.light .askmymd-mermaid g.section-0 foreignObject div,
+.preview-container.light .mermaid .section-0 foreignObject div,
+.preview-container.light .askmymd-mermaid [class*="section-root"] foreignObject div,
+.preview-container.light .askmymd-mermaid [class*="section--1"] foreignObject div,
+.preview-container.light .askmymd-mermaid [class*="section-0"] foreignObject div {
+  fill: #1e293b !important;
+  color: #1e293b !important;
+}
+
+/* Dark mode: keep distinct center but ensure white/near-white text      */
+/* for contrast. Uses mid-tone dark blue #1e3a8a (from palette) with    */
+/* #f1f5f9 / #f8fafc text. Per-theme, not hardcoded.                    */
+.preview-container.dark .askmymd-mermaid .section-root rect,
+.preview-container.dark .askmymd-mermaid .section-root circle,
+.preview-container.dark .askmymd-mermaid .section-root path,
+.preview-container.dark .askmymd-mermaid .section-root polygon,
+.preview-container.dark .askmymd-mermaid g.section-root rect,
+.preview-container.dark .askmymd-mermaid g.section-root circle,
+.preview-container.dark .askmymd-mermaid g.section-root path,
+.preview-container.dark .askmymd-mermaid g.section-root polygon,
+.preview-container.dark .mermaid .section-root rect,
+.preview-container.dark .mermaid .section-root circle,
+.preview-container.dark .mermaid .section-root path,
+.preview-container.dark .mermaid .section-root polygon,
+.preview-container.dark .askmymd-mermaid .section--1 rect,
+.preview-container.dark .askmymd-mermaid .section--1 circle,
+.preview-container.dark .askmymd-mermaid .section--1 path,
+.preview-container.dark .askmymd-mermaid .section--1 polygon,
+.preview-container.dark .mermaid .section--1 rect,
+.preview-container.dark .mermaid .section--1 circle,
+.preview-container.dark .mermaid .section--1 path,
+.preview-container.dark .mermaid .section--1 polygon,
+.preview-container.dark .askmymd-mermaid .section-0 rect,
+.preview-container.dark .askmymd-mermaid .section-0 circle,
+.preview-container.dark .askmymd-mermaid .section-0 path,
+.preview-container.dark .askmymd-mermaid g.section-0 rect,
+.preview-container.dark .askmymd-mermaid g.section-0 circle,
+.preview-container.dark .askmymd-mermaid g.section-0 path,
+.preview-container.dark .mermaid .section-0 rect,
+.preview-container.dark .mermaid .section-0 circle,
+.preview-container.dark .mermaid .section-0 path,
+.preview-container.dark .askmymd-mermaid [class*="section-root"] rect,
+.preview-container.dark .askmymd-mermaid [class*="section-root"] circle,
+.preview-container.dark .askmymd-mermaid [class*="section-root"] path,
+.preview-container.dark .mermaid [class*="section-root"] rect,
+.preview-container.dark .mermaid [class*="section-root"] circle,
+.preview-container.dark .mermaid [class*="section-root"] path,
+.preview-container.dark .askmymd-mermaid [class*="section--1"] rect,
+.preview-container.dark .askmymd-mermaid [class*="section--1"] circle,
+.preview-container.dark .askmymd-mermaid [class*="section--1"] path,
+.preview-container.dark .mermaid [class*="section--1"] rect,
+.preview-container.dark .mermaid [class*="section--1"] circle,
+.preview-container.dark .mermaid [class*="section--1"] path {
+  fill: #1e3a8a !important;
+  stroke: #3b82f6 !important;
+}
+
+.preview-container.dark .askmymd-mermaid .section-root text,
+.preview-container.dark .askmymd-mermaid g.section-root text,
+.preview-container.dark .mermaid .section-root text,
+.preview-container.dark .askmymd-mermaid .section--1 text,
+.preview-container.dark .askmymd-mermaid g.section--1 text,
+.preview-container.dark .mermaid .section--1 text,
+.preview-container.dark .askmymd-mermaid .section-0 text,
+.preview-container.dark .askmymd-mermaid g.section-0 text,
+.preview-container.dark .mermaid .section-0 text,
+.preview-container.dark .askmymd-mermaid [class*="section-root"] text,
+.preview-container.dark .mermaid [class*="section-root"] text,
+.preview-container.dark .askmymd-mermaid [class*="section--1"] text,
+.preview-container.dark .mermaid [class*="section--1"] text,
+.preview-container.dark .askmymd-mermaid [class*="section-0"] text,
+.preview-container.dark .mermaid [class*="section-0"] text,
+.preview-container.dark .askmymd-mermaid .section-root foreignObject div,
+.preview-container.dark .askmymd-mermaid g.section-root foreignObject div,
+.preview-container.dark .mermaid .section-root foreignObject div,
+.preview-container.dark .askmymd-mermaid .section--1 foreignObject div,
+.preview-container.dark .askmymd-mermaid g.section--1 foreignObject div,
+.preview-container.dark .mermaid .section--1 foreignObject div,
+.preview-container.dark .askmymd-mermaid .section-0 foreignObject div,
+.preview-container.dark .askmymd-mermaid g.section-0 foreignObject div,
+.preview-container.dark .mermaid .section-0 foreignObject div,
+.preview-container.dark .askmymd-mermaid [class*="section-root"] foreignObject div,
+.preview-container.dark .askmymd-mermaid [class*="section--1"] foreignObject div,
+.preview-container.dark .askmymd-mermaid [class*="section-0"] foreignObject div {
+  fill: #f1f5f9 !important;
+  color: #f1f5f9 !important;
+}
+
+/* Light mode: never allow dark fills with dark text — */
+/* any shape that mermaid still paints dark (e.g. hardcoded */
+/* #1e3a8a, #0c4a6e, #4c1d95, #1e293b, #0f172a, pure blue */
+/* #0000ff/#0000cd used by mindmap root) is forced to a */
+/* light pastel so black text remains readable. This is a */
+/* safety net for diagrams beyond mindmap (flowchart, etc.). */
+.preview-container.light .askmymd-mermaid svg [fill="#1e3a8a"],
+.preview-container.light .mermaid svg [fill="#1e3a8a"],
+.preview-container.light .askmymd-mermaid svg [fill="#0c4a6e"],
+.preview-container.light .mermaid svg [fill="#0c4a6e"],
+.preview-container.light .askmymd-mermaid svg [fill="#4c1d95"],
+.preview-container.light .mermaid svg [fill="#4c1d95"],
+.preview-container.light .askmymd-mermaid svg [fill="#1e293b"],
+.preview-container.light .mermaid svg [fill="#1e293b"],
+.preview-container.light .askmymd-mermaid svg [fill="#0f172a"],
+.preview-container.light .mermaid svg [fill="#0f172a"],
+.preview-container.light .askmymd-mermaid svg [fill="#334155"],
+.preview-container.light .mermaid svg [fill="#334155"],
+.preview-container.light .askmymd-mermaid svg [fill="#0000ff"],
+.preview-container.light .mermaid svg [fill="#0000ff"],
+.preview-container.light .askmymd-mermaid svg [fill="#0000FF"],
+.preview-container.light .mermaid svg [fill="#0000FF"],
+.preview-container.light .askmymd-mermaid svg [fill="#0000cd"],
+.preview-container.light .mermaid svg [fill="#0000cd"],
+.preview-container.light .askmymd-mermaid svg [fill="#000080"],
+.preview-container.light .mermaid svg [fill="#000080"] {
+  fill: #ede9fe !important;
+}
+
+.preview-container.light .askmymd-mermaid svg [stroke="#1e3a8a"],
+.preview-container.light .mermaid svg [stroke="#1e3a8a"],
+.preview-container.light .askmymd-mermaid svg [stroke="#3b82f6"],
+.preview-container.light .mermaid svg [stroke="#3b82f6"] {
+  stroke: #a78bfa !important;
+}
+
+/* Light mode text on light bg must be dark — override any */
+/* white/near-white text that would be invisible on pastel. */
+.preview-container.light .askmymd-mermaid svg [fill="#f1f5f9"],
+.preview-container.light .mermaid svg [fill="#f1f5f9"],
+.preview-container.light .askmymd-mermaid svg [fill="#f8fafc"],
+.preview-container.light .mermaid svg [fill="#f8fafc"],
+.preview-container.light .askmymd-mermaid svg [fill="white"],
+.preview-container.light .mermaid svg [fill="white"] {
+  fill: #1e293b !important;
+}
+
+/* ---- Invalid-diagram fallback (amber card, both themes) ---- */
+.preview-container .askmymd-mermaid-error {
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  background-color: rgba(245, 158, 11, 0.1);
+  border-radius: 6px;
+  padding: 1rem;
+  margin: 1.5rem 0;
+}
+.preview-container .askmymd-mermaid-error figcaption {
+  color: #fbbf24;
+  font-weight: 600;
+  font-size: 0.875rem;
+  margin-bottom: 0.5rem;
+}
+.preview-container .askmymd-mermaid-error p {
+  color: #fde68a;
+  font-size: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+.preview-container .askmymd-mermaid-error pre {
+  background-color: #0f172a;
+  margin: 0;
+  font-size: 0.75rem;
+  color: #cbd5e1;
+}
+
+/* ---- Scrollbar styling (per theme) ---- */
+.preview-container::-webkit-scrollbar {
+  width: 8px;
+}
+.preview-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+.preview-container.light::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+.preview-container.light::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+.preview-container.dark::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 4px;
+}
+.preview-container.dark::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
