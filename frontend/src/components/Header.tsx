@@ -1,4 +1,4 @@
-import { FileText, MessageCircle, Moon, Sun } from "lucide-react";
+import { MessageCircle, Moon, Sun } from "lucide-react";
 
 interface HeaderProps {
   /** Whether the document is prepared — colors the Chat button. */
@@ -23,8 +23,12 @@ export default function Header({
   return (
     <header className={`sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b px-6 ${isDark ? "border-slate-800 bg-slate-900" : "border-gray-200 bg-white"}`}>
       <div className="flex items-center gap-2">
-        <FileText className="h-6 w-6 text-emerald-500" aria-hidden="true" />
-        <h1 className={`text-lg font-bold ${isDark ? "text-slate-100" : "text-gray-900"}`}>AskmyMD</h1>
+        <img
+          src="/logo-final.png"
+          alt="AskmyMD"
+          className="h-8 w-8 object-contain"
+        />
+        <h1 className={`text-lg font-bold ${isDark ? "text-slate-100" : "text-gray-900"}`}>askmymd</h1>
       </div>
       <div className="flex items-center gap-2">
         <button
