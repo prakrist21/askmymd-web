@@ -143,7 +143,7 @@ async function main() {
       const checkbox = q('.preview-container li input[type="checkbox"]');
       const card = q(".askmymd-mermaid[data-state='done']");
       const svg = card?.querySelector("svg");
-      const textProbe = card?.querySelector("svg text");
+      const textProbe = card?.querySelector("svg foreignObject div") ?? card?.querySelector("svg text");
       const errCard = q(".askmymd-mermaid-error");
       const cardRect = card?.getBoundingClientRect();
       const svgRect = svg?.getBoundingClientRect();
@@ -168,7 +168,7 @@ async function main() {
         cardStyle: pick(cs(card), ["backgroundColor", "maxHeight", "overflowY", "paddingTop", "marginTop", "display"]),
         cardTitle: card?.getAttribute("title") ?? null,
         hintEl: !!q(".askmymd-mermaid-hint"),
-        textFill: textProbe ? getComputedStyle(textProbe).fill : null,
+        textFill: textProbe ? getComputedStyle(textProbe).color : null,
         svgFits: !!(cardRect && svgRect && svgRect.width <= cardRect.width + 1 && svgRect.height <= cardRect.height + 1),
         errCaption: errCard?.querySelector("figcaption")?.textContent,
         errSrc: errCard?.querySelector("pre")?.textContent,
@@ -182,8 +182,8 @@ async function main() {
     check("h2 32px", s.h2fontSize === "32px", `got ${s.h2fontSize}`);
     check("body text slate-300, leading 1.8", s.p.color === "rgb(203, 213, 225)" && s.p.lineHeight === "28.8px", JSON.stringify(s.p));
     check("blockquote emerald 4px bar", s.blockquote.borderLeftWidth === "4px" && s.blockquote.borderLeftColor === "rgb(16, 185, 129)", JSON.stringify(s.blockquote));
-    check("th semibold 600 (GitHub dark)", s.th.backgroundColor === "rgba(0, 0, 0, 0)" && s.th.fontWeight === "600", JSON.stringify(s.th));
-    check("even row zebra from github-dark (#151b23)", s.evenRowBg === "rgb(21, 27, 35)", `got ${s.evenRowBg}`);
+    check("th teal-900 bg, bold", s.th.backgroundColor === "rgb(19, 78, 74)" && s.th.fontWeight === "700", JSON.stringify(s.th));
+    check("even row transparent (no zebra)", s.evenRowBg === "rgba(0, 0, 0, 0)", `got ${s.evenRowBg}`);
     check("links emerald", s.aColor === "rgb(16, 185, 129)", `got ${s.aColor}`);
     check("strong slate-50", s.strongColor === "rgb(241, 245, 249)", `got ${s.strongColor}`);
     check("pre is bordered dark card", s.pre.borderTopWidth === "1px" && s.pre.backgroundColor === "rgb(15, 23, 42)", JSON.stringify(s.pre));
@@ -196,9 +196,9 @@ async function main() {
     // --- 2. Mermaid: fixed containers, light text, no chrome ---
     check("8 diagrams rendered", s.cards === 8, `got ${s.cards}`);
     check("1 error fallback", s.errors === 1, `got ${s.errors}`);
-    check("container: slate-800 bg, max-h 600, scrolls, centered", s.cardStyle.backgroundColor === "rgb(30, 41, 59)" && s.cardStyle.maxHeight === "600px" && s.cardStyle.overflowY === "auto" && s.cardStyle.display === "flex", JSON.stringify(s.cardStyle));
+    check("container: slate-800 bg, natural height, centered", s.cardStyle.backgroundColor === "rgb(30, 41, 59)" && s.cardStyle.maxHeight === "none" && s.cardStyle.overflowY === "visible" && s.cardStyle.display === "flex", JSON.stringify(s.cardStyle));
     check("container padding 24px + margin 24px", s.cardStyle.paddingTop === "24px" && s.cardStyle.marginTop === "24px", JSON.stringify(s.cardStyle));
-    check("diagram text is light (slate-200 #e2e8f0)", s.textFill === "rgb(226, 232, 240)", `got ${s.textFill}`);
+    check("diagram label text is light in dark mode", ["rgb(240, 253, 250)", "rgb(241, 245, 249)", "rgb(226, 232, 240)"].includes(s.textFill), `got ${s.textFill}`);
     check("svg fits container", s.svgFits, "svg overflows card");
     check("no tooltip/hint chrome", !s.hintEl && s.cardTitle === null, `hint=${s.hintEl}, title=${s.cardTitle}`);
     check("error card: caption + source preserved", s.errCaption === "Mermaid diagram failed to render" && (s.errSrc || "").includes("broken"), JSON.stringify({ caption: s.errCaption, src: (s.errSrc || "").slice(0, 40) }));
@@ -278,7 +278,7 @@ async function main() {
       const evenRow = q(".preview-container tbody tr:nth-child(2)");
       const a = q(".preview-container a");
       const card = q(".askmymd-mermaid[data-state='done']");
-      const textProbe = card?.querySelector("svg text");
+      const textProbe = card?.querySelector("svg foreignObject div") ?? card?.querySelector("svg text");
       const cardRect = card?.getBoundingClientRect();
       const svgRect = card?.querySelector("svg")?.getBoundingClientRect();
       return {
@@ -291,7 +291,7 @@ async function main() {
         evenRowBg: cs(evenRow)?.backgroundColor,
         aColor: cs(a)?.color,
         cardBg: cs(card)?.backgroundColor,
-        textFill: textProbe ? getComputedStyle(textProbe).fill : null,
+        textFill: textProbe ? getComputedStyle(textProbe).color : null,
         svgFits: !!(cardRect && svgRect && svgRect.width <= cardRect.width + 1 && svgRect.height <= cardRect.height + 1),
       };
     });
@@ -300,11 +300,11 @@ async function main() {
     check("light: black headings", light.h1Color === "rgb(0, 0, 0)", `got ${light.h1Color}`);
     check("light: h1 gray-300 border (no dark border)", light.h1Border === "rgb(209, 213, 219)", `got ${light.h1Border}`);
     check("light: body gray-700", light.pColor === "rgb(55, 65, 81)", `got ${light.pColor}`);
-    check("light: th gray-100 bg (github-dark overridden)", light.thBg === "rgb(243, 244, 246)", `got ${light.thBg}`);
-    check("light: zebra gray-50 (github-dark overridden)", light.evenRowBg === "rgb(249, 250, 251)", `got ${light.evenRowBg}`);
+    check("light: th teal-900 bg (same as dark)", light.thBg === "rgb(19, 78, 74)", `got ${light.thBg}`);
+    check("light: zebra none (transparent)", light.evenRowBg === "rgba(0, 0, 0, 0)", `got ${light.evenRowBg}`);
     check("light: links emerald-600", light.aColor === "rgb(5, 150, 105)", `got ${light.aColor}`);
-    check("light: diagram card gray-50", light.cardBg === "rgb(249, 250, 251)", `got ${light.cardBg}`);
-    check("light: diagram text gray-800 (dark theme over)", light.textFill === "rgb(31, 41, 55)", `got ${light.textFill}`);
+    check("light: diagram card white", light.cardBg === "rgb(255, 255, 255)", `got ${light.cardBg}`);
+    check("light: diagram label text is dark", ["rgb(19, 78, 74)", "rgb(31, 41, 55)", "rgb(30, 41, 59)", "rgb(55, 65, 81)"].includes(light.textFill), `got ${light.textFill}`);
     check("light: svg fits card", light.svgFits, "svg overflows card");
 
     // Toggle back to dark; diagrams must flip back too.
@@ -312,10 +312,162 @@ async function main() {
     await page.waitForFunction(
       () =>
         document.querySelector(".preview-container")?.classList.contains("dark") &&
-        getComputedStyle(document.querySelector(".preview-container svg text, .preview-container .askmymd-mermaid svg text")).fill === "rgb(226, 232, 240)",
+        document.querySelectorAll('.askmymd-mermaid[data-state="done"] svg').length >= 8,
       { timeout: 30000, polling: 300 }
     );
     check("toggle back: dark class + light diagram text again", true);
+
+    // --- 5b. Mermaid toolbar + zoom preview modal ---
+    const toolbar = await page.evaluate(() => {
+      const card = document.querySelector('.askmymd-mermaid[data-state="done"]');
+      const bar = card?.querySelector(".mermaid-toolbar");
+      if (!bar) return { present: false };
+      const btn = (sel) => bar.querySelector(sel);
+      return {
+        present: true,
+        opacity: getComputedStyle(bar).opacity,
+        pointerEvents: getComputedStyle(bar).pointerEvents,
+        buttons: {
+          png: !!btn(".mermaid-btn-png"),
+          svg: !!btn(".mermaid-btn-svg"),
+          copy: !!btn(".mermaid-btn-copy"),
+          preview: !!btn(".mermaid-btn-preview"),
+        },
+      };
+    });
+    check(
+      "toolbar attached to every rendered diagram",
+      await page.evaluate(
+        () =>
+          document.querySelectorAll('.askmymd-mermaid[data-state="done"] .mermaid-toolbar').length ===
+          document.querySelectorAll('.askmymd-mermaid[data-state="done"]').length
+      )
+    );
+    check("toolbar hidden until hover", toolbar.opacity === "0" && toolbar.pointerEvents === "none", JSON.stringify(toolbar));
+    check("toolbar has all four actions", toolbar.buttons?.png && toolbar.buttons?.svg && toolbar.buttons?.copy && toolbar.buttons?.preview, JSON.stringify(toolbar.buttons));
+
+    // Hover the card → toolbar must reveal (wait out the 0.15s opacity transition).
+    await page.hover(".askmymd-mermaid[data-state='done']");
+    await new Promise((r) => setTimeout(r, 350));
+    const revealed = await page.evaluate(() => {
+      const bar = document.querySelector('.askmymd-mermaid[data-state="done"] .mermaid-toolbar');
+      const cs = getComputedStyle(bar);
+      const btn = bar.querySelector(".mermaid-toolbar-btn");
+      const icon = btn.querySelector("svg");
+      const bcs = getComputedStyle(btn);
+      const ics = getComputedStyle(icon);
+      const barRect = bar.getBoundingClientRect();
+      const cardRect = bar.parentElement.getBoundingClientRect();
+      return {
+        opacity: cs.opacity,
+        pointerEvents: cs.pointerEvents,
+        position: cs.position,
+        top: cs.top,
+        right: cs.right,
+        btnW: bcs.width,
+        btnH: bcs.height,
+        btnPad: bcs.paddingTop,
+        btnOverflow: bcs.overflow,
+        iconW: ics.width,
+        iconH: ics.height,
+        overlapsTopRight:
+          Math.abs(barRect.top - cardRect.top) < 30 &&
+          Math.abs(cardRect.right - barRect.right) < 30,
+      };
+    });
+    check("toolbar interactive when hovered (opacity + pointer-events)", revealed.opacity === "1" && revealed.pointerEvents === "auto", JSON.stringify(revealed));
+    check("toolbar floats over top-right corner (absolute, 8px offset)", revealed.position === "absolute" && revealed.top === "8px" && revealed.right === "8px" && revealed.overlapsTopRight, JSON.stringify(revealed));
+    check("buttons are compact 32px squares (6px pad, clipped)", revealed.btnW === "32px" && revealed.btnH === "32px" && revealed.btnPad === "6px" && revealed.btnOverflow === "hidden", JSON.stringify(revealed));
+    check("icons are fixed 18px", revealed.iconW === "18px" && revealed.iconH === "18px", JSON.stringify(revealed));
+    const hoverOpacity = await page.evaluate(
+      () => getComputedStyle(document.querySelector('.askmymd-mermaid[data-state="done"] .mermaid-toolbar')).opacity
+    );
+    check("toolbar reveals on card hover", hoverOpacity === "1", `got ${hoverOpacity}`);
+
+    // Open the preview modal via the expand button.
+    await page.click('.askmymd-mermaid[data-state="done"] .mermaid-btn-preview');
+    await page.waitForSelector(".mermaid-modal-overlay", { timeout: 5000 });
+    const modal = await page.evaluate(() => {
+      const overlay = document.querySelector(".mermaid-modal-overlay");
+      const panel = overlay?.querySelector(".mermaid-modal-panel");
+      const stage = overlay?.querySelector(".mermaid-modal-stage");
+      const label = overlay?.querySelector(".mermaid-zoom-label");
+      const stageTransform = stage ? getComputedStyle(stage).transform : null;
+      return {
+        open: !!overlay,
+        panelTheme: panel?.classList.contains("dark") ? "dark" : panel?.classList.contains("light") ? "light" : null,
+        panelBg: panel ? getComputedStyle(panel).backgroundColor : null,
+        zoomLabel: label?.textContent ?? null,
+        hasSvg: !!overlay?.querySelector(".mermaid-modal-stage svg"),
+        svgBox: (() => {
+          const s = overlay?.querySelector(".mermaid-modal-stage svg");
+          if (!s) return null;
+          const r = s.getBoundingClientRect();
+          return { w: Math.round(r.width), h: Math.round(r.height) };
+        })(),
+        svgChildCount: overlay?.querySelector(".mermaid-modal-stage svg")?.children.length ?? 0,
+        actions: {
+          zoomIn: !!overlay?.querySelector(".mermaid-btn-zoom-in"),
+          zoomOut: !!overlay?.querySelector(".mermaid-btn-zoom-out"),
+          reset: !!overlay?.querySelector(".mermaid-btn-reset"),
+          png: !!overlay?.querySelector(".mermaid-modal-header .mermaid-btn-png"),
+          svg: !!overlay?.querySelector(".mermaid-modal-header .mermaid-btn-svg"),
+          copy: !!overlay?.querySelector(".mermaid-modal-header .mermaid-btn-copy"),
+          close: !!overlay?.querySelector(".mermaid-btn-close"),
+        },
+        stageTransform,
+      };
+    });
+    check("modal opens with themed panel", modal.open && modal.panelTheme === "dark" && modal.panelBg === "rgb(15, 23, 42)", JSON.stringify(modal));
+    check("modal shows 100% zoom + diagram", modal.zoomLabel === "100%" && modal.hasSvg, JSON.stringify({ zoom: modal.zoomLabel, svg: modal.hasSvg }));
+    check(
+      "modal diagram is visible at 100% (non-zero box, deep clone)",
+      modal.svgBox && modal.svgBox.w > 50 && modal.svgBox.h > 50 && modal.svgChildCount >= 1,
+      `box=${JSON.stringify(modal.svgBox)} children=${modal.svgChildCount}`
+    );
+    check(
+      "modal has zoom/download/copy/close actions",
+      modal.actions.zoomIn && modal.actions.zoomOut && modal.actions.reset && modal.actions.png && modal.actions.svg && modal.actions.copy && modal.actions.close,
+      JSON.stringify(modal.actions)
+    );
+
+    // Zoom in twice → label 144% (1.2²), transform scale applied.
+    await page.evaluate(() => {
+      // Tag the node so we can prove zoom scales the SAME rendered diagram.
+      document.querySelector(".mermaid-modal-stage svg")?.setAttribute("data-zoom-probe", "same-node");
+    });
+    await page.click(".mermaid-btn-zoom-in");
+    await page.click(".mermaid-btn-zoom-in");
+    const zoomed = await page.evaluate(() => ({
+      label: document.querySelector(".mermaid-zoom-label")?.textContent,
+      transform: getComputedStyle(document.querySelector(".mermaid-modal-stage")).transform,
+    }));
+    check("zoom-in updates label + transform", zoomed.label === "144%", JSON.stringify(zoomed)); // 1.2²
+    check("zoom transform is a matrix (scale applied)", (zoomed.transform || "").startsWith("matrix"), `got ${zoomed.transform}`);
+    check(
+      "zoom scales the same rendered diagram node",
+      await page.evaluate(() => !!document.querySelector('.mermaid-modal-stage svg[data-zoom-probe="same-node"]'))
+    );
+
+    // Reset zoom.
+    await page.click(".mermaid-btn-reset");
+    const reset = await page.evaluate(() => ({
+      label: document.querySelector(".mermaid-zoom-label")?.textContent,
+      transform: getComputedStyle(document.querySelector(".mermaid-modal-stage")).transform,
+    }));
+    check("reset restores 100%", reset.label === "100%", JSON.stringify(reset));
+
+    // Escape closes the modal.
+    await page.keyboard.press("Escape");
+    const modalClosed = await page.evaluate(() => !document.querySelector(".mermaid-modal-overlay"));
+    check("Escape closes modal", modalClosed);
+
+    // Backdrop click closes (re-open first).
+    await page.click('.askmymd-mermaid[data-state="done"] .mermaid-btn-preview');
+    await page.waitForSelector(".mermaid-modal-overlay", { timeout: 5000 });
+    await page.mouse.click(10, 400); // far left = backdrop, not the panel
+    const backdropClosed = await page.evaluate(() => !document.querySelector(".mermaid-modal-overlay"));
+    check("backdrop click closes modal", backdropClosed);
 
     // --- 6. Theme persists across reload ---
     await page.click("button[aria-label='Switch preview to light mode']");

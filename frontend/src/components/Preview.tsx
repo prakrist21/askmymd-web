@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { getImage } from "../imageStore";
+import { attachMermaidToolbar } from "./mermaidToolbar";
 // highlight.js-free by design: code blocks render plain on the dark card.
 // The dark variant (not the main entry) is deliberate: the main css resolves
 // its variables to the LIGHT theme unless the OS prefers dark — headless
@@ -447,6 +448,8 @@ export default function Preview({ content, isDark }: PreviewProps) {
         const container = document.createElement("div");
         container.className = "askmymd-mermaid";
         container.dataset.state = "loading";
+        // Kept for the toolbar (download filenames derive from the source).
+        container.dataset.mermaidSource = source;
         pre.replaceWith(container);
         return { container, source };
       })
@@ -473,6 +476,12 @@ export default function Preview({ content, isDark }: PreviewProps) {
                 // Non-fatal: CSS fallback in preview.css still applies
               }
               container.dataset.state = "done";
+              // Hover toolbar: PNG/SVG download, clipboard copy, zoom preview.
+              try {
+                attachMermaidToolbar(container, source);
+              } catch {
+                // Non-fatal: diagram still renders without the toolbar
+              }
             } catch (err) {
               if (cancelled) return;
               const message =
