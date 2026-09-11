@@ -432,7 +432,7 @@ export default function Preview({ content, isDark }: PreviewProps) {
 
   return (
     <div className={`flex flex-col ${isDark ? "bg-slate-950" : "bg-white"}`}>
-      <div className={`border-b px-4 py-2 ${isDark ? "border-slate-800 bg-slate-950" : "border-gray-200 bg-white"}`}>
+      <div className={`sticky top-14 z-10 border-b px-4 py-2 ${isDark ? "border-slate-800 bg-slate-950" : "border-gray-200 bg-white"}`}>
         <span className={`text-sm font-semibold tracking-wide uppercase ${isDark ? "text-slate-400" : "text-gray-500"}`}>
           Preview
         </span>

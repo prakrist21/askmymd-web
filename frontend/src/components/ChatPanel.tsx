@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader2, RefreshCw, X } from "lucide-react";
+import { Check, Copy, Loader2, RefreshCw, X } from "lucide-react";
 import {
   ApiError,
   friendlyMessage,
@@ -72,6 +72,7 @@ export default function ChatPanel({
   const [isResyncing, setIsResyncing] = useState(false);
   const [showResyncConfirm, setShowResyncConfirm] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const isReady = phase === "ready";
@@ -185,6 +186,30 @@ export default function ChatPanel({
     } finally {
       setIsResyncing(false);
       setShowResyncConfirm(false);
+    }
+  }
+
+  async function handleCopy(text: string, idx: number) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedIdx(idx);
+      setTimeout(() => setCopiedIdx(null), 2000);
+    } catch {
+      // fallback for older browsers
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        setCopiedIdx(idx);
+        setTimeout(() => setCopiedIdx(null), 2000);
+      } catch {
+        // ignore
+      }
     }
   }
 
@@ -305,22 +330,50 @@ export default function ChatPanel({
             {messages.length === 0 && !isResyncing && !pending ? (
               <p className={`py-8 text-center text-sm ${isDark ? "text-slate-500" : "text-gray-400"}`}>No messages yet — ask something about the document.</p>
             ) : (
-              messages.map((msg, i) => (
-                <div
-                  key={i}
-                  className={
-                    msg.role === "user"
-                      ? isDark
-                        ? "ml-auto max-w-[85%] rounded-2xl rounded-br-sm border border-emerald-600/30 bg-emerald-900/30 px-3 py-2 text-sm break-words whitespace-pre-wrap text-slate-100"
-                        : "ml-auto max-w-[85%] rounded-2xl rounded-br-sm border border-emerald-500/30 bg-emerald-50 px-3 py-2 text-sm break-words whitespace-pre-wrap text-gray-900"
-                      : isDark
-                        ? "mr-auto max-w-[85%] rounded-2xl rounded-bl-sm border border-slate-700 bg-slate-800 px-3 py-2 text-sm break-words whitespace-pre-wrap text-slate-100"
-                        : "mr-auto max-w-[85%] rounded-2xl rounded-bl-sm border border-gray-200 bg-gray-100 px-3 py-2 text-sm break-words whitespace-pre-wrap text-gray-900"
-                  }
-                >
-                  {msg.content}
-                </div>
-              ))
+              messages.map((msg, i) => {
+                const isUser = msg.role === "user";
+                if (isUser) {
+                  return (
+                    <div
+                      key={i}
+                      className={
+                        isDark
+                          ? "ml-auto max-w-[85%] rounded-2xl rounded-br-sm border border-emerald-600/30 bg-emerald-900/30 px-3 py-2 text-sm break-words whitespace-pre-wrap text-slate-100"
+                          : "ml-auto max-w-[85%] rounded-2xl rounded-br-sm border border-emerald-500/30 bg-emerald-50 px-3 py-2 text-sm break-words whitespace-pre-wrap text-gray-900"
+                      }
+                    >
+                      {msg.content}
+                    </div>
+                  );
+                }
+                const isCopied = copiedIdx === i;
+                return (
+                  <div key={i} className="mr-auto max-w-[85%] space-y-1">
+                    <div
+                      className={
+                        isDark
+                          ? "rounded-2xl rounded-bl-sm border border-slate-700 bg-slate-800 px-3 py-2 text-sm break-words whitespace-pre-wrap text-slate-100"
+                          : "rounded-2xl rounded-bl-sm border border-gray-200 bg-gray-100 px-3 py-2 text-sm break-words whitespace-pre-wrap text-gray-900"
+                      }
+                    >
+                      {msg.content}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(msg.content, i)}
+                      aria-label={isCopied ? "Copied" : "Copy response"}
+                      className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors ${
+                        isDark
+                          ? "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                          : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                      }`}
+                    >
+                      {isCopied ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
+                      {isCopied ? "Copied" : "Copy"}
+                    </button>
+                  </div>
+                );
+              })
             )}
             {pending && !isResyncing && (
               <div className={`mr-auto animate-pulse rounded-2xl rounded-bl-sm border px-3 py-2 text-sm ${isDark ? "border-slate-700 bg-slate-800 text-slate-400" : "border-gray-200 bg-gray-100 text-gray-500"}`}>

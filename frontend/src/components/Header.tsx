@@ -21,7 +21,7 @@ export default function Header({
   // h-14 pins the height to 56px to match the drawer overlay's top-14 in
   // App.tsx — content-driven height would drift out of alignment.
   return (
-    <header className={`flex h-14 shrink-0 items-center justify-between border-b px-6 ${isDark ? "border-slate-800 bg-slate-900" : "border-gray-200 bg-white"}`}>
+    <header className={`sticky top-0 z-40 flex h-14 shrink-0 items-center justify-between border-b px-6 ${isDark ? "border-slate-800 bg-slate-900" : "border-gray-200 bg-white"}`}>
       <div className="flex items-center gap-2">
         <FileText className="h-6 w-6 text-emerald-500" aria-hidden="true" />
         <h1 className={`text-lg font-bold ${isDark ? "text-slate-100" : "text-gray-900"}`}>AskmyMD</h1>
