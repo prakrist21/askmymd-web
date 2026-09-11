@@ -4,10 +4,13 @@ interface EditorProps {
   value: string;
   onChange: (value: string) => void;
   isDark: boolean;
+  editorRef?: React.RefObject<HTMLTextAreaElement | null>;
 }
 
-export default function Editor({ value, onChange, isDark }: EditorProps) {
+export default function Editor({ value, onChange, isDark, editorRef }: EditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const internalRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = editorRef ?? internalRef;
 
   function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -46,6 +49,7 @@ export default function Editor({ value, onChange, isDark }: EditorProps) {
         </div>
       </div>
       <textarea
+        ref={textareaRef}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Paste or type markdown here, or upload a .md file…"

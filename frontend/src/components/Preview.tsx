@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
+import { getImage } from "../imageStore";
 // highlight.js-free by design: code blocks render plain on the dark card.
 // The dark variant (not the main entry) is deliberate: the main css resolves
 // its variables to the LIGHT theme unless the OS prefers dark — headless
@@ -377,6 +378,28 @@ function patchMindmapRoot(container: HTMLElement, isDark: boolean) {
   }
 }
 
+function resolveLocalImages(container: HTMLElement) {
+  const imgs = Array.from(container.querySelectorAll("img"));
+  imgs.forEach((img) => {
+    const src = img.getAttribute("src") || "";
+    if (src.startsWith("local:")) {
+      const id = src.slice(6);
+      const dataUrl = getImage(id);
+      if (dataUrl) {
+        img.setAttribute("src", dataUrl);
+        // Also update src property for immediate display
+        (img as HTMLImageElement).src = dataUrl;
+      } else {
+        const placeholder = document.createElement("div");
+        placeholder.textContent = `🖼️ Image not found: ${id} — re-upload to restore`;
+        placeholder.style.cssText =
+          "padding:0.75rem; border:1px dashed #f59e0b; background:#fef3c7; color:#92400e; border-radius:6px; margin:0.75rem 0; font-size:0.875rem; font-family:'Inter',sans-serif;";
+        img.replaceWith(placeholder);
+      }
+    }
+  });
+}
+
 /* ------------------------------------------------------------------ */
 /* Preview                                                             */
 /* ------------------------------------------------------------------ */
@@ -409,6 +432,7 @@ export default function Preview({ content, isDark }: PreviewProps) {
     el.innerHTML = DOMPurify.sanitize(html);
 
     addCodeCopyButtons(el);
+    resolveLocalImages(el);
 
     // marked emits ```mermaid as <pre><code class="language-mermaid">.
     const blocks = Array.from(el.querySelectorAll("pre > code.language-mermaid"));
