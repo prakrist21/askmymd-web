@@ -858,6 +858,288 @@
   fill: #1e293b !important;
 }
 
+/* ==================================================================== */
+/* Mermaid hover toolbar                                               */
+/* ==================================================================== */
+/* Positioned top-right INSIDE each diagram card; hidden until the card */
+/* (or toolbar) is hovered so it never clutters reading. Absolute off   */
+/* the card's padding-box corner, so it floats OVER the diagram without */
+/* affecting document flow (the card is position: relative — see below).*/
+.mermaid-toolbar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 8px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  z-index: 5;
+}
+
+/* Floating-chip background so the bar reads as one control, not four
+   loose buttons. Panel-scoped variants below cover the modal header. */
+.preview-container.light .mermaid-toolbar {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.12);
+}
+.preview-container.dark .mermaid-toolbar {
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid #334155;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+}
+.mermaid-modal-panel.light .mermaid-toolbar,
+.mermaid-modal-panel.dark .mermaid-toolbar {
+  border-style: none;
+  box-shadow: none;
+  padding: 0;
+  background: transparent;
+}
+
+/* Card hover (and keyboard focus of any control) reveals the toolbar. */
+.preview-container .askmymd-mermaid:hover .mermaid-toolbar,
+.preview-container .mermaid:hover .mermaid-toolbar,
+.preview-container .askmymd-mermaid:focus-within .mermaid-toolbar,
+.preview-container .mermaid:focus-within .mermaid-toolbar,
+.mermaid-toolbar:hover,
+.mermaid-toolbar:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* The card itself must be a positioning context; keep flex centering. */
+.preview-container .askmymd-mermaid,
+.preview-container .mermaid {
+  position: relative;
+}
+
+/* ---- Toolbar buttons ---- */
+/* Compact icon-only squares: fixed 32×32 box, 6px padding, overflow
+   hidden so the icon can never exceed the button bounds. Icon-only
+   (no text span) keeps the bar one row of equal small squares; the
+   accessible name is the aria-label, the tooltip is title. */
+.mermaid-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  padding: 6px;
+  overflow: hidden;
+  box-sizing: border-box;
+  border-radius: 6px;
+  border: 1px solid;
+  cursor: pointer;
+  line-height: 1;
+  font-size: 0;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+/* Explicit fixed icon size, re-asserted with !important: the diagram-svg
+   rules .preview-container.(light|dark) .askmymd-mermaid svg { width:100% }
+   have specificity (0,2,1) and otherwise beat this (0,1,1), inflating every
+   toolbar icon to the card width. !important pins 18px regardless. */
+.mermaid-toolbar .mermaid-toolbar-btn svg {
+  width: 18px !important;
+  height: 18px !important;
+  max-width: 18px;
+  max-height: 18px;
+  flex: none;
+  display: block;
+}
+/* Hardening net for any future svg inside the toolbar: never inherit the
+   diagram's width:100% / height:auto or font-size-derived sizing. */
+.mermaid-toolbar svg {
+  width: 18px;
+  height: 18px;
+  max-width: 18px;
+  max-height: 18px;
+}
+.mermaid-toolbar-btn:hover {
+  filter: brightness(1.08);
+}
+.mermaid-toolbar-btn.copied {
+  color: #10b981 !important;
+  border-color: #10b981 !important;
+}
+
+/* Theme variants — same ramp as .code-copy-btn so they read as siblings. */
+.preview-container.light .mermaid-toolbar-btn {
+  background: #ffffff;
+  border-color: #e5e7eb;
+  color: #374151;
+}
+.preview-container.light .mermaid-toolbar-btn:hover {
+  background: #f3f4f6;
+}
+.preview-container.dark .mermaid-toolbar-btn {
+  background: #1e293b;
+  border-color: #475569;
+  color: #e2e8f0;
+}
+.preview-container.dark .mermaid-toolbar-btn:hover {
+  background: #334155;
+}
+/* The modal overlay is appended to <body>, outside .preview-container —
+   repeat the button ramp scoped to the modal panel. */
+.mermaid-modal-panel.light .mermaid-toolbar-btn {
+  background: #ffffff;
+  border-color: #e5e7eb;
+  color: #374151;
+}
+.mermaid-modal-panel.light .mermaid-toolbar-btn:hover {
+  background: #f3f4f6;
+}
+.mermaid-modal-panel.dark .mermaid-toolbar-btn {
+  background: #1e293b;
+  border-color: #475569;
+  color: #e2e8f0;
+}
+.mermaid-modal-panel.dark .mermaid-toolbar-btn:hover {
+  background: #334155;
+}
+
+/* ==================================================================== */
+/* Mermaid full-screen preview modal                                   */
+/* ==================================================================== */
+.mermaid-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 6, 23, 0.75);
+  padding: 1rem;
+}
+.mermaid-modal-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(1100px, 96vw);
+  height: min(820px, 92vh);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+/* Modal panel theming: the overlay is appended to <body>, NOT inside
+   .preview-container, so theme-scoped selectors cannot reach it.
+   openMermaidModal applies .light/.dark to the panel itself. */
+.mermaid-modal-panel.light {
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+}
+.mermaid-modal-panel.dark {
+  background: #0f172a;
+  border: 1px solid #334155;
+}
+
+.mermaid-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid;
+  flex: none;
+}
+.mermaid-modal-panel.light .mermaid-modal-header {
+  border-color: #e5e7eb;
+}
+.mermaid-modal-panel.dark .mermaid-modal-header {
+  border-color: #334155;
+}
+
+/* Modal title + zoom readout. */
+.mermaid-modal-title {
+  font-family: 'Inter', Arial, Helvetica, sans-serif;
+  font-weight: 600;
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mermaid-modal-panel.light .mermaid-modal-title {
+  color: #1f2937;
+}
+.mermaid-modal-panel.dark .mermaid-modal-title {
+  color: #f1f5f9;
+}
+.mermaid-modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex: none;
+}
+.mermaid-zoom-label {
+  font-family: 'Inter', Arial, Helvetica, sans-serif;
+  font-size: 11px;
+  min-width: 3.2em;
+  text-align: center;
+  padding: 0.25rem 0.2rem;
+}
+.mermaid-modal-panel.light .mermaid-zoom-label {
+  color: #374151;
+}
+.mermaid-modal-panel.dark .mermaid-zoom-label {
+  color: #e2e8f0;
+}
+
+/* Themed buttons inside the modal (the overlay is outside .preview-container,
+   so the .preview-container-scoped button rules above don't reach it). */
+.mermaid-modal-panel.light .mermaid-toolbar-btn {
+  background: #ffffff;
+  border-color: #e5e7eb;
+  color: #374151;
+}
+.mermaid-modal-panel.light .mermaid-toolbar-btn:hover {
+  background: #f3f4f6;
+}
+.mermaid-modal-panel.dark .mermaid-toolbar-btn {
+  background: #1e293b;
+  border-color: #475569;
+  color: #e2e8f0;
+}
+.mermaid-modal-panel.dark .mermaid-toolbar-btn:hover {
+  background: #334155;
+}
+
+/* Zoom/pan viewport + stage. The stage is transformed (translate+scale);   */
+/* the viewport clips it and enables drag cursor feedback while panning.    */
+.mermaid-modal-viewport {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  position: relative;
+}
+.mermaid-modal-viewport.is-panning {
+  cursor: grabbing;
+}
+.mermaid-modal-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center center;
+  will-change: transform;
+  max-width: 100%;
+  max-height: 100%;
+  transform: translate(0px, 0px) scale(1);
+}
+.mermaid-modal-stage svg {
+  /* openMermaidModal sets explicit px width/height inline (intrinsic
+     geometry fit to the viewport). Do NOT use width:auto/100% here:
+     mermaid emits width="100%" on the svg, and inside the auto-sized
+     flex stage that percentage resolves to zero — an invisible diagram. */
+  display: block;
+}
 /* ---- Invalid-diagram fallback (amber card, both themes) ---- */
 .preview-container .askmymd-mermaid-error {
   border: 1px solid rgba(245, 158, 11, 0.5);
