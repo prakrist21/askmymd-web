@@ -17,13 +17,12 @@ Vector store is simulated as:
 Archiving is done via `is_archived` boolean on ChatMessageRow.
 """
 import logging
-import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Path
 
 from app.auth import get_current_user, CurrentUser
-from app.db import archive_messages, chroma_store, documents, Document
+from app.db import archive_messages, chroma_store, create_document as db_create_document, documents, Document
 from app.errors import document_not_found, document_resyncing, document_error
 from app.models import ChatRequest, ChatResponse
 from app.services import rag_service
@@ -54,11 +53,8 @@ async def create_document(
     """
     content = body.get("content", "")
     # Allow empty content creation — resync will handle validation later.
-    doc_id = uuid.uuid4().hex[:12]
-    # Use db.create-like inline to keep owner scoping
-    from app.db import Document as DocModel
-    doc = DocModel(id=doc_id, owner_id=user.id, content=content, status="ready")
-    documents[doc_id] = doc
+    doc = db_create_document(owner_id=user.id, content=content, status="ready")
+    doc_id = doc.id
 
     # Initial embedding so ask works without explicit resync
     if content and content.strip():
