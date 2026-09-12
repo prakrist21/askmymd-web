@@ -236,6 +236,71 @@ def test_ask_document_isolation_no_cross_document_leak():
         assert gen_summary == "summary A cats"
 
 
+def test_create_via_post_then_resync_succeeds_end_to_end():
+    """End-to-end proof for server-issued document identity (frontend fix):
+
+    1. POST /documents with actual markdown (what ChatPanel handlePrepare now does
+       via createDocument()) returns a server-generated document_id.
+    2. POST /documents/{id}/resync with that same ID succeeds with {status:'ready'}
+       instead of 404 DOCUMENT_NOT_FOUND. This exercises the real
+       ready→resyncing→ready machine, not the prepareDocument fallback.
+    This mirrors the traced frontend path: createDocument() → prepareDocument()
+    → resyncDocument(serverId) → 200.
+    """
+    with patch.object(rag_service.RagStore, "build", autospec=True) as mock_build, \
+         patch("app.services.llm_service.generate_summary", return_value="summary from create"), \
+         patch("app.routers.documents.rag_service.chunk_markdown", return_value=["chunk hello world"]) as mock_chunk_create:
+        def fake_build(self, chunks, summary):
+            self.chunks = list(chunks)
+            self.summary = summary
+            self.index = MagicMock()
+            return len(chunks)
+        mock_build.side_effect = fake_build
+
+        # Step 1: register with backend — server generates canonical ID
+        create_resp = client.post(
+            "/documents",
+            headers=auth_headers(USER_A),
+            json={"content": "# Doc via createDocument\nHello backend"},
+        )
+        assert create_resp.status_code == 200, create_resp.text
+        body = create_resp.json()
+        assert "document_id" in body
+        server_id = body["document_id"]
+        assert server_id in documents
+        assert documents[server_id].owner_id == USER_A
+        assert documents[server_id].content == "# Doc via createDocument\nHello backend"
+        assert server_id in chroma_store or server_id in document_stores
+        # Update content to simulate user edit before resync (as frontend would)
+        documents[server_id].content = "# Doc edited\nHello backend edited content for resync"
+
+    # Step 2: resync with SAME server-issued ID must hit real backend machine, not 404
+    with patch("app.routers.documents.rag_service.chunk_markdown", return_value=["chunk edited hello"]) as mock_chunk_resync, \
+         patch("app.services.llm_service.generate_summary", return_value="summary from resync"), \
+         patch.object(rag_service.RagStore, "build", autospec=True) as mock_build2:
+        def fake_build2(self, chunks, summary):
+            self.chunks = list(chunks)
+            self.summary = summary
+            self.index = MagicMock()
+            return len(chunks)
+        mock_build2.side_effect = fake_build2
+
+        resync_resp = client.post(f"/documents/{server_id}/resync", headers=auth_headers(USER_A))
+        assert resync_resp.status_code == 200, resync_resp.text
+        data = resync_resp.json()
+        assert data["status"] == "ready"
+        assert data["document_id"] == server_id
+        assert "chunks" in data
+        assert documents[server_id].status == "ready"
+        mock_chunk_resync.assert_called_once_with("# Doc edited\nHello backend edited content for resync")
+
+    # Step 3: verify a client-only random UUID would have 404'd (old broken path)
+    fake_client_id = "00000000-0000-4000-a000-000000000000"
+    bad_resp = client.post(f"/documents/{fake_client_id}/resync", headers=auth_headers(USER_A))
+    assert bad_resp.status_code == 404
+    assert bad_resp.json()["code"] == "DOCUMENT_NOT_FOUND"
+
+
 def test_ask_document_rewrite_also_scoped_to_active_store():
     """Ensures the rewrite node's re-retrieve also closes over the caller-provided
     store. Grading returns irrelevant once so the graph goes rewrite->retrieve,

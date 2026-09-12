@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Copy, Loader2, RefreshCw, X } from "lucide-react";
 import {
   ApiError,
+  createDocument,
   friendlyMessage,
   prepareDocument,
   resyncDocument,
@@ -10,9 +11,13 @@ import {
 import {
   type ChatMessage,
   loadStoredChatHistory,
+  loadStoredDocumentId,
   loadStoredMarkdown,
+  loadStoredMessagesDocumentId,
   loadStoredPrepared,
   saveChatHistory,
+  saveDocumentId,
+  saveMessagesDocumentId,
   savePrepared,
 } from "../storage";
 
@@ -27,8 +32,10 @@ interface ChatPanelProps {
   /** Readiness mirror for the header Chat button (emerald when ready). */
   onReadyChange: (ready: boolean) => void;
   isDark: boolean;
-  /** Document id for /documents/{id}/resync — when absent, resync falls back to re-prepare. */
+  /** Stable document ID for history scoping + /documents/{id}/resync. */
   documentId?: string | null;
+  /** Notifies App when a new ID is minted so App.documentId stays in sync with localStorage. */
+  onDocumentIdChange?: (id: string | null) => void;
 }
 
 /**
@@ -47,6 +54,7 @@ export default function ChatPanel({
   onReadyChange,
   isDark,
   documentId,
+  onDocumentIdChange,
 }: ChatPanelProps) {
   const [phase, setPhase] = useState<Phase>(() => {
     const restored = loadStoredPrepared() && !!loadStoredMarkdown().trim();
@@ -60,10 +68,14 @@ export default function ChatPanel({
   const [messages, setMessages] = useState<ChatMessage[]>(() =>
     loadStoredChatHistory()
   );
-  // Which document the current `messages` are about; empty when there is no
-  // history. Lets a re-prepare keep history for an unchanged document.
-  const [messagesDoc, setMessagesDoc] = useState<string>(() =>
-    loadStoredChatHistory().length > 0 ? loadStoredMarkdown() : ""
+  // Which document the current `messages` belong to (stable ID, NOT markdown).
+  // Previously this was `messagesDoc: string` compared via `messagesDoc !== doc`,
+  // which wiped history on any text edit. Now we compare stored IDs so edits
+  // to the SAME logical document reuse the ID and retain history.
+  // - Reused on edits: same documentId → keep history
+  // - New on explicit new-doc: different ID → clear history
+  const [messagesDocumentId, setMessagesDocumentId] = useState<string | null>(() =>
+    loadStoredMessagesDocumentId()
   );
   const [input, setInput] = useState("");
   const [pending, setPending] = useState(false);
@@ -87,8 +99,9 @@ export default function ChatPanel({
   // a restored "ready" state isn't clobbered by the mount-time effect run.)
   useEffect(() => {
     saveChatHistory(messages);
+    saveMessagesDocumentId(messagesDocumentId);
     if (isReady) savePrepared(true);
-  }, [messages, isReady]);
+  }, [messages, messagesDocumentId, isReady]);
 
   // Keep the newest message (or the typing indicator) in view.
   useEffect(() => {
@@ -101,15 +114,60 @@ export default function ChatPanel({
       setError("Please add some content before starting the chat.");
       return;
     }
+
+    // --- Document identity: reuse stable ID so edits keep chat history ---
+    // GENERATED (now server-issued): first prepare (no stored ID) → call
+    // createDocument(doc) with actual markdown; backend generates canonical
+    // document_id (uuid hex) and creates Document record + initial vector store.
+    // REUSED: subsequent edits/re-prepares of same logical document → reuse
+    // stored server ID, do NOT call createDocument again. Only a genuinely
+    // NEW document (future "New document" button, file upload of different
+    // file, or localStorage clear) should create a new backend Document.
+    // There is currently NO "New document" UI, so edits never mint a new ID.
+    let activeId = documentId ?? loadStoredDocumentId();
+    if (!activeId) {
+      // First-ever prepare: register with backend before the global /prepare.
+      // We pass the actual markdown so the backend Document has real content
+      // (not empty) and its initial embedding/summary succeeds. The returned
+      // server ID is canonical — we discard any client-side UUID concept.
+      try {
+        const created = await createDocument(doc);
+        activeId = created.document_id;
+        saveDocumentId(activeId);
+        onDocumentIdChange?.(activeId);
+      } catch (err) {
+        // If backend registration fails, surface the error and abort; don't
+        // fall back to a client-only UUID because that would make resync 404.
+        setPhase("idle");
+        if (err instanceof ApiError) {
+          setError(friendlyMessage(err, "Could not create document on server."));
+        } else {
+          setError("Could not create document on server.");
+        }
+        return;
+      }
+    }
+
     setError(null);
     setRePrepareNeeded(false);
     setPhase("preparing");
     try {
+      // Both calls are kept intentionally:
+      // - createDocument (above, first-time only) creates the backend Document
+      //   row + per-document FAISS store used by /documents/{id}/resync|ask.
+      // - prepareDocument builds the v1 global FAISS store used by /prepare + /chat,
+      //   which the live UI's core chat feature still depends on. Until the UI
+      //   migrates fully to /documents/{id}/ask, we keep both so v1 chat keeps working.
       await prepareDocument(doc);
-      // Keep history if it belongs to this same document (e.g. re-prepare
-      // after a backend restart); clear it when the document changed.
-      if (messagesDoc !== doc) setMessages([]);
-      setMessagesDoc(doc);
+      // Keep history if it belongs to this same document ID (e.g. re-prepare
+      // after backend restart preserves history); clear only when ID changed.
+      // Migration: old installs have no MESSAGES_DOCUMENT_ID_KEY; treat
+      // null+non-empty as belonging to activeId so we don't wipe on upgrade.
+      if (messagesDocumentId !== null && messagesDocumentId !== activeId) {
+        setMessages([]);
+      }
+      setMessagesDocumentId(activeId);
+      saveMessagesDocumentId(activeId);
       setPhase("ready");
     } catch (err) {
       setPhase("idle");
@@ -162,17 +220,35 @@ export default function ChatPanel({
     setError(null);
     setIsResyncing(true);
     const previousMessages = [...messages];
+    // Effective ID is prop or storage fallback (covers reloads where prop sync lags).
+    const effectiveId = documentId ?? loadStoredDocumentId();
     try {
-      if (documentId) {
-        await resyncDocument(documentId);
+      if (effectiveId) {
+        try {
+          await resyncDocument(effectiveId);
+        } catch (err) {
+          // Safety net only — after the fix above, effectiveId is always server-issued
+          // via createDocument(), so 404 should be unreachable in normal flow.
+          // It can still fire if the backend restarted and lost its in-memory
+          // `documents` dict; then we fall back to re-prepare so the user isn't blocked.
+          if (err instanceof ApiError && err.code === "DOCUMENT_NOT_FOUND") {
+            await prepareDocument(markdown);
+          } else {
+            throw err;
+          }
+        }
       } else {
-        // Fallback for single-document (no ID) mode: re-run /prepare with current markdown
-        // This still re-indexes and we manually clear chat.
+        // No ID at all (pre-upgrade state): re-run /prepare with current markdown
         await prepareDocument(markdown);
       }
       // On success, clear the visible chat messages and show a fresh empty chat state
       setMessages([]);
       saveChatHistory([]);
+      // Keep messagesDocumentId in sync (resync preserves document identity)
+      if (effectiveId) {
+        setMessagesDocumentId(effectiveId);
+        saveMessagesDocumentId(effectiveId);
+      }
       setToast(null);
     } catch (err) {
       // On failure, show an error toast and leave the previous chat state intact
