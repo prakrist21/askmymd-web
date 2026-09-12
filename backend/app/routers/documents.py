@@ -139,7 +139,7 @@ async def ask_document(
     chat_history = body.chat_history
     summary = active_store.summary if active_store else ""
     try:
-        answer = rag_service.run_corrective_rag(question, chat_history, summary)
+        answer = rag_service.run_corrective_rag(question, chat_history, summary, active_store)
     except Exception as exc:
         # If LLM unavailable etc, propagate as AppError; don't archive.
         # Remove the just-added user message? Keep for debugging.
