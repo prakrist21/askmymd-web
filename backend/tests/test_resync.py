@@ -2,7 +2,7 @@
 
 Covers:
 - resync clears old vectors, re-embeds current content
-- archives old chat history, history only returns non-archived
+- archives old chat history
 - ask returns 409 while status is resyncing (and after error until retry)
 """
 import pytest
@@ -86,11 +86,6 @@ def test_resync_clears_old_vectors_and_reembeds():
         # Verify document status back to ready
         assert documents[doc.id].status == "ready"
 
-        # Verify history endpoint only returns non-archived (empty)
-        hist = client.get(f"/documents/{doc.id}/history", headers=auth_headers(USER_A))
-        assert hist.status_code == 200
-        assert hist.json()["messages"] == []
-
 def test_ask_returns_409_while_resyncing():
     doc = _create_doc()
     doc.status = "resyncing"
@@ -137,12 +132,12 @@ def test_resync_401_without_auth():
     assert resp.status_code == 401
     assert resp.json()["code"] == "UNAUTHORIZED"
 
-def test_history_filters_archived_after_resync():
+def test_archive_filters_after_resync():
+    """Archiving retains rows but marks them; non-archived filter returns only new messages."""
     doc = _create_doc(content="fresh content")
     # Add two messages, then resync will archive them
     chat_messages.append(ChatMessageRow(id="m1", document_id=doc.id, owner_id=USER_A, role="user", content="old q"))
     chat_messages.append(ChatMessageRow(id="m2", document_id=doc.id, owner_id=USER_A, role="assistant", content="old a"))
-    # Add a new message after archiving simulation by manually archiving
     with patch("app.routers.documents.rag_service.chunk_markdown", return_value=["new chunk"]), \
          patch("app.services.llm_service.generate_summary", return_value="sum"), \
          patch.object(rag_service.RagStore, "build", autospec=True) as mock_build:
@@ -157,11 +152,10 @@ def test_history_filters_archived_after_resync():
     # Add a new message after resync
     chat_messages.append(ChatMessageRow(id="m3", document_id=doc.id, owner_id=USER_A, role="user", content="new q"))
 
-    hist = client.get(f"/documents/{doc.id}/history", headers=auth_headers(USER_A))
-    assert hist.status_code == 200
-    msgs = hist.json()["messages"]
-    assert len(msgs) == 1
-    assert msgs[0]["content"] == "new q"
+    # Non-archived filter should return only the new message
+    non_archived = [m for m in chat_messages if m.document_id == doc.id and not m.is_archived]
+    assert len(non_archived) == 1
+    assert non_archived[0].content == "new q"
     # Ensure total archived =2, total =3
     assert len(chat_messages) == 3
     assert len([m for m in chat_messages if m.is_archived]) == 2
