@@ -27,6 +27,6 @@ async def chat(request: ChatRequest) -> ChatResponse:
         request.question[:80],
     )
     answer = rag_service.run_corrective_rag(
-        request.question, request.chat_history, store.summary
+        request.question, request.chat_history, store.summary, store
     )
     return ChatResponse(answer=answer)

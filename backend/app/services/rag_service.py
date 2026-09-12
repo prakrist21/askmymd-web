@@ -133,13 +133,6 @@ class ChatState(TypedDict):
     answer: str
 
 
-def _retrieve_step(state: ChatState) -> dict:
-    """Retrieve top-5 chunks from FAISS with the current query."""
-    chunks = store.retrieve(state["query"])
-    logger.info("Retrieve: %d chunks for query %r", len(chunks), state["query"][:80])
-    return {"chunks": chunks}
-
-
 def _grade_step(state: ChatState) -> dict:
     """LLM-graded relevance of the retrieved chunks to question + summary."""
     relevant = llm_service.grade_chunks(
@@ -148,22 +141,6 @@ def _grade_step(state: ChatState) -> dict:
     grade = "relevant" if relevant else "irrelevant"
     logger.info("Grade: %s (corrections so far: %d)", grade, state["corrections"])
     return {"grade": grade}
-
-
-def _rewrite_step(state: ChatState) -> dict:
-    """Rewrite the query (history-aware) and re-retrieve with a bigger pool."""
-    query = llm_service.rewrite_query(
-        state["question"], state["chat_history"], state["summary"]
-    )
-    logger.info(
-        "Correction round %d: re-retrieving with rewritten query",
-        state["corrections"] + 1,
-    )
-    return {
-        "query": query,
-        "chunks": store.retrieve(query, k=TOP_K + 2),
-        "corrections": state["corrections"] + 1,
-    }
 
 
 def _grade_router(state: ChatState) -> str:
@@ -212,11 +189,36 @@ def _verify_step(state: ChatState) -> dict:
     return {"answer": fallback}
 
 
-def _build_chat_graph() -> object:
+def _build_chat_graph(active_store: RagStore) -> object:
     """retrieve -> grade -> (rewrite -> retrieve -> grade) -> generate -> verify.
 
-    Built once and reused; the graph itself is stateless (state is per-run).
+    The graph closes over *active_store* instead of the module-global ``store``,
+    so callers can thread a per-document RagStore through the retrieval nodes.
+    A fresh graph is built per call to run_corrective_rag; callers pass the
+    store explicitly so retrieval is scoped to the document being asked about.
     """
+
+    def _retrieve_step(state: ChatState) -> dict:
+        """Retrieve top-5 chunks from the caller-provided store."""
+        chunks = active_store.retrieve(state["query"])
+        logger.info("Retrieve: %d chunks for query %r", len(chunks), state["query"][:80])
+        return {"chunks": chunks}
+
+    def _rewrite_step(state: ChatState) -> dict:
+        """Rewrite the query (history-aware) and re-retrieve with a bigger pool."""
+        query = llm_service.rewrite_query(
+            state["question"], state["chat_history"], state["summary"]
+        )
+        logger.info(
+            "Correction round %d: re-retrieving with rewritten query",
+            state["corrections"] + 1,
+        )
+        return {
+            "query": query,
+            "chunks": active_store.retrieve(query, k=TOP_K + 2),
+            "corrections": state["corrections"] + 1,
+        }
+
     builder = StateGraph(ChatState)
     builder.add_node("retrieve", _retrieve_step)
     builder.add_node("grade", _grade_step)
@@ -237,16 +239,22 @@ def _build_chat_graph() -> object:
     return builder.compile()
 
 
-_chat_graph = None
-
-
 def run_corrective_rag(
-    question: str, chat_history: list[ChatMessage], summary: str
+    question: str,
+    chat_history: list[ChatMessage],
+    summary: str,
+    store: RagStore | None = None,
 ) -> str:
-    """Run the corrective-RAG graph for one /chat call and return the answer."""
-    global _chat_graph
-    if _chat_graph is None:
-        _chat_graph = _build_chat_graph()
+    """Run the corrective-RAG graph for one /chat call and return the answer.
+
+    The caller must provide the RagStore to search. The graph's retrieve and
+    rewrite nodes close over this store instance rather than reading the
+    module-global ``store``, so per-document flows (e.g. documents ask) can
+    scope retrieval to the correct document without affecting /prepare+/chat.
+    If *store* is None (back-compat), the module-global store is used.
+    """
+    effective_store: RagStore = store if store is not None else globals()["store"]  # fallback for legacy callers
+    graph = _build_chat_graph(effective_store)
 
     initial: ChatState = {
         "question": question,
@@ -257,5 +265,5 @@ def run_corrective_rag(
         "grade": "irrelevant",
         "corrections": 0,
     }
-    result = _chat_graph.invoke(initial)
+    result = graph.invoke(initial)
     return result["answer"]
