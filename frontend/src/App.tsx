@@ -10,6 +10,7 @@ import {
   loadStoredMarkdown,
   loadStoredPrepared,
   loadStoredTheme,
+  saveDocumentId,
   saveMarkdown,
   saveTheme,
 } from "./storage";
@@ -29,7 +30,15 @@ export default function App() {
   // Preview theme (dark default). The app chrome stays dark; this drives
   // the preview surface + mermaid palette and persists across refreshes.
   const [theme, setTheme] = useState<"dark" | "light">(() => loadStoredTheme());
-  const [documentId] = useState<string | null>(() => loadStoredDocumentId());
+  // Document identity: stable ID representing the logical document.
+  // - Generated on first prepare (see ChatPanel handlePrepare / storage.getOrCreateDocumentId)
+  // - Reused on subsequent edits/re-prepares so chat history survives text changes.
+  // - Only a NEW document (explicit "New document" action, file upload of a
+  //   different logical file, or manual localStorage clear) should generate a
+  //   fresh ID. There is currently NO "New document" button in the UI, so in
+  //   practice a new ID only appears after clearing storage or via future upload flow.
+  // This state mirrors localStorage so ChatPanel can scope history by ID instead of markdown.
+  const [documentId, setDocumentId] = useState<string | null>(() => loadStoredDocumentId());
 
   useEffect(() => {
     saveTheme(theme);
@@ -39,6 +48,22 @@ export default function App() {
   useEffect(() => {
     saveMarkdown(markdown);
   }, [markdown]);
+
+  // Keep documentId state in sync if another tab changes storage (and on mount).
+  useEffect(() => {
+    function onStorage(e: StorageEvent) {
+      if (e.key === "askmymd.document_id") {
+        setDocumentId(e.newValue);
+      }
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  const handleDocumentIdChange = (id: string | null) => {
+    if (id) saveDocumentId(id);
+    setDocumentId(id);
+  };
 
   // Escape closes the drawer.
   useEffect(() => {
@@ -110,6 +135,7 @@ export default function App() {
           <ChatPanel
             markdown={markdown}
             documentId={documentId}
+            onDocumentIdChange={handleDocumentIdChange}
             onDocError={setDocError}
             onClose={() => setDrawerOpen(false)}
             onReadyChange={setChatReady}
