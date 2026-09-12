@@ -1,29 +1,31 @@
-"""Document-scoped routes: resync, ask.
+"""Document-scoped routes: resync, ask — Stage 5 pgvector only.
 
-This module implements the spec:
-
-- POST /documents/{document_id}/resync  (auth, 404 if not owned)
-  sets status resyncing -> deletes vectors -> re-chunks/embeds -> ready
-  archives ChatMessage rows, blocks ask with 409 while resyncing,
-  on failure sets status error and keeps ask blocked.
-
-- POST /documents/{document_id}/ask  (auth, 409 if resyncing/error)
-- POST /documents  (helper to create a document, used by tests/frontend)
-
-Vector store is simulated as:
-- `db.chroma_store[doc_id] = list[chunks]`  (Chroma collection equivalent)
-- `rag_stores[doc_id] = RagStore`  (FAISS equivalent for retrieval)
-
-Archiving is done via `is_archived` boolean on ChatMessageRow.
+Stage 5: retrieval is ``SELECT ... FROM chunks WHERE document_id=:id
+ORDER BY embedding <=> :query_vec LIMIT k`` (k=5, k=7 for rewrite).
+FAISS (document_stores / chroma_store) has been removed — pgvector is the
+only source of truth. ``create_document`` and ``resync`` now treat chunk
+persistence failures as fatal (status error), not warning-only. ``ask`` also
+backfills any document that was left with zero chunks during Stage 4's
+warning window via ``ensure_chunks``.
 """
+
 import logging
-from typing import Optional
 
 from fastapi import APIRouter, Depends, Path
 
-from app.auth import get_current_user, CurrentUser
-from app.db import archive_messages, chroma_store, create_document as db_create_document, documents, Document
-from app.errors import document_not_found, document_resyncing, document_error
+from app.auth import CurrentUser, get_current_user
+from app.db import (
+    archive_messages,
+    create_document as db_create_document,
+    Document,
+    ensure_chunks,
+    get_chunk_count,
+    get_document,
+    insert_chunks,
+    delete_chunks,
+    update_document,
+)
+from app.errors import document_error, document_not_found, document_resyncing
 from app.models import ChatRequest, ChatResponse
 from app.services import rag_service
 
@@ -31,12 +33,9 @@ logger = logging.getLogger("askmymd.documents")
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-# Per-document FAISS stores (mirrors Chroma). Kept here to avoid polluting rag_service global store.
-document_stores: dict[str, rag_service.RagStore] = {}
-
 
 def _get_document_or_404(document_id: str, user: CurrentUser) -> Document:
-    doc = documents.get(document_id)
+    doc = get_document(document_id)
     if not doc or doc.owner_id != user.id:
         raise document_not_found()
     return doc
@@ -48,40 +47,55 @@ async def create_document(
     user: CurrentUser = Depends(get_current_user),
 ):
     """Create a document for the authenticated user. Helper for tests and UI.
-    
+
     Request body: { "content": str, "title": Optional[str] }
+    Stage 5: chunks are embedded and inserted into pgvector. Failures are
+    now loud — the document is marked error instead of warning-only.
     """
     content = body.get("content", "")
-    # Allow empty content creation — resync will handle validation later.
     doc = db_create_document(owner_id=user.id, content=content, status="ready")
     doc_id = doc.id
 
-    # Initial embedding so ask works without explicit resync
+    # Stage 6: generate and cache summary once on create (skip Groq on cold start)
+    if content and content.strip():
+        try:
+            from app.services.llm_service import generate_summary
+
+            try:
+                summary = generate_summary(content)
+                update_document(doc_id, summary=summary)
+                doc.summary = summary
+                logger.info("Cached summary for doc %s (%d chars)", doc_id, len(summary))
+            except Exception as e:
+                logger.warning("Summary generation failed for doc %s: %s (leaving summary null)", doc_id, e)
+        except Exception:
+            pass
+
     if content and content.strip():
         try:
             chunks = rag_service.chunk_markdown(content)
             if chunks:
-                store = rag_service.RagStore()
-                # For tests without real embedding model, use fallback: skip embedding if no model
+                # Stage 5: only pgvector, no FAISS. Failure is fatal.
                 try:
-                    store.build(chunks, summary="")  # summary empty initially
+                    insert_chunks(doc_id, chunks)
+                    logger.info("Persisted %d chunks to DB for doc %s (pgvector)", len(chunks), doc_id)
                 except Exception as e:
-                    # Embedding unavailable in test (no model) — still populate chroma_store with chunks
-                    logger.warning("Initial embed failed for doc %s: %s (populating chroma_store only)", doc_id, e)
-                chroma_store[doc_id] = list(chunks)
-                if store.index is not None:
-                    document_stores[doc_id] = store
-                else:
-                    # still store chunks as fallback collection
-                    document_stores[doc_id] = store  # may be empty index but chunks present
-                    if not hasattr(store, 'chunks') or not store.chunks:
-                        store.chunks = list(chunks)
-            else:
-                chroma_store[doc_id] = []
+                    logger.warning("DB chunk persist failed for doc %s: %s (failing request)", doc_id, e)
+                    update_document(doc_id, status="error")
+                    doc.status = "error"
+                    # Surface as 500 so caller knows persistence failed
+                    from app.errors import resync_failed
+
+                    raise resync_failed(str(e))
         except Exception as e:
+            # resync_failed already raised above will propagate; this catches chunking failures
+            if isinstance(e, Exception) and "RESYNC" in str(type(e)):
+                raise
             logger.warning("create_document chunking failed %s: %s", doc_id, e)
-            chroma_store[doc_id] = []
+            update_document(doc_id, status="error")
             doc.status = "error"
+            # Still return 200 with error status for empty-content path? Keep previous behaviour
+            # but chunk persist failures already raised.
 
     return {"document_id": doc_id, "status": doc.status}
 
@@ -99,24 +113,31 @@ async def ask_document(
     if doc.status == "error":
         raise document_error()
 
-    store = document_stores.get(document_id)
-    # Fallback to legacy global store if per-doc store missing but legacy exists
-    if store is None or store.index is None:
-        # Try chroma_store presence as indicator; if chunks exist but no FAISS index, fabricate answer via simple path
-        # For real asks we need FAISS; if missing, treat as not prepared
-        if document_id not in chroma_store or not chroma_store[document_id]:
-            # Could be legacy single-doc flow: check global store
-            if rag_service.store.index is None or not rag_service.store.chunks:
+    # Stage 5 backfill: if document was left with zero chunks from Stage 4 warning window,
+    # re-embed now so retrieval has something to search.
+    try:
+        if get_chunk_count(document_id) == 0:
+            logger.info("Backfill: document %s has 0 chunks, re-embedding", document_id)
+            ensured = ensure_chunks(document_id)
+            logger.info("Backfill ensured %d chunks for doc %s", ensured, document_id)
+            if ensured == 0:
                 from app.errors import not_prepared
-                raise not_prepared()
 
-    # Use per-document store if available else global
-    active_store = store if (store and store.index is not None) else rag_service.store
+                raise not_prepared()
+    except Exception as e:
+        # If backfill itself fails, treat as not prepared / error
+        logger.warning("Backfill failed for doc %s: %s", document_id, e)
+        from app.errors import not_prepared
+
+        # If doc has no chunks after backfill attempt, ask cannot proceed
+        if get_chunk_count(document_id) == 0:
+            raise not_prepared()
 
     question = body.question
     chat_history = body.chat_history
-    summary = active_store.summary if active_store else ""
-    answer = rag_service.run_corrective_rag(question, chat_history, summary, active_store)
+    summary = doc.summary or ""
+    # Stage 5: retrieval via pgvector filtered by document_id (k=5, k=7 in rewrite)
+    answer = rag_service.run_corrective_rag(question, chat_history, summary, document_id=document_id)
     return ChatResponse(answer=answer)
 
 
@@ -127,26 +148,21 @@ async def resync_document(
 ):
     doc = _get_document_or_404(document_id, user)
 
-    # Set to resyncing immediately to block ask
+    update_document(document_id, status="resyncing")
     doc.status = "resyncing"
     logger.info("Resync started for doc %s by user %s", document_id, user.id)
 
-    # Archive existing chat history (instead of hard delete)
     archived_count = archive_messages(document_id)
     logger.info("Archived %d messages for doc %s", archived_count, document_id)
 
-    # Delete all existing vectors for that document_id from the Chroma collection
-    # Simulate: chroma_store[doc_id] cleared and per-doc RagStore cleared
-    old_vector_count = len(chroma_store.get(document_id, []))
-    chroma_store.pop(document_id, None)
-    old_store = document_stores.pop(document_id, None)
-    # Also clear per-doc rag store's index if present
-    if old_store and old_store.index is not None:
-        old_store.index = None
-        old_store.chunks = []
-    logger.info("Deleted %d vectors for doc %s", old_vector_count, document_id)
+    # Stage 5: delete only from DB (pgvector). FAISS removed.
+    try:
+        db_deleted = delete_chunks(document_id)
+        logger.info("Deleted %d rows (DB) for doc %s", db_deleted, document_id)
+    except Exception as e:
+        logger.warning("DB chunk delete failed for doc %s: %s", document_id, e)
+        db_deleted = 0
 
-    # Re-run chunking and embedding on the document's current content
     try:
         chunks = rag_service.chunk_markdown(doc.content)
         logger.info("Resync chunking produced %d chunks for doc %s", len(chunks), document_id)
@@ -154,34 +170,34 @@ async def resync_document(
         if not chunks:
             raise ValueError("chunking produced no chunks from current content")
 
-        # Re-build vector store (Chroma + FAISS)
-        # Generate a fresh summary? The original /prepare generates summary via LLM.
-        # For resync we should also regenerate summary if possible.
         summary = ""
         try:
             from app.services.llm_service import generate_summary
+
             summary = generate_summary(doc.content)
+            # Cache summary for cold rebuilds (Stage 6 will formalize, but store now)
+            update_document(document_id, summary=summary)
         except Exception as e:
             logger.warning("Resync summary generation failed for %s: %s (using empty summary)", document_id, e)
-            summary = old_store.summary if old_store else ""
+            summary = doc.summary or ""
 
-        new_store = rag_service.RagStore()
-        # Build FAISS — may fail if embedding model unavailable
-        new_store.build(chunks, summary)
-        document_stores[document_id] = new_store
-        chroma_store[document_id] = list(chunks)
-        logger.info("Resync embedding done for doc %s: %d vectors", document_id, len(chunks))
+        # Stage 5: persist to pgvector only, no FAISS. Failure is fatal.
+        insert_chunks(document_id, chunks)
+        logger.info("Persisted %d resynced chunks to DB for doc %s", len(chunks), document_id)
 
+        update_document(document_id, status="ready")
         doc.status = "ready"
         return {"document_id": document_id, "status": "ready", "chunks": len(chunks), "archived": archived_count}
 
     except Exception as exc:
         logger.exception("Resync failed for doc %s: %s", document_id, exc)
-        # Ensure ask remains blocked — set to error, not stuck in resyncing forever
+        update_document(document_id, status="error")
         doc.status = "error"
-        # Purge any partially built store
-        document_stores.pop(document_id, None)
-        # chroma_store already cleared above; leave empty to indicate no vectors
-        # Surface error to caller
+        # Purge any partially inserted chunks (delete again to leave clean)
+        try:
+            delete_chunks(document_id)
+        except Exception:
+            pass
         from app.errors import resync_failed
+
         raise resync_failed(str(exc))
