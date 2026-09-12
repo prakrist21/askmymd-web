@@ -1,4 +1,4 @@
-"""Document-scoped routes: resync, ask, history.
+"""Document-scoped routes: resync, ask.
 
 This module implements the spec:
 
@@ -8,7 +8,6 @@ This module implements the spec:
   on failure sets status error and keeps ask blocked.
 
 - POST /documents/{document_id}/ask  (auth, 409 if resyncing/error)
-- GET  /documents/{document_id}/history  (auth, returns only non-archived)
 - POST /documents  (helper to create a document, used by tests/frontend)
 
 Vector store is simulated as:
@@ -18,12 +17,13 @@ Vector store is simulated as:
 Archiving is done via `is_archived` boolean on ChatMessageRow.
 """
 import logging
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Path
 
 from app.auth import get_current_user, CurrentUser
-from app.db import documents, chroma_store, chat_messages, archive_messages, get_messages_for_document, Document
+from app.db import archive_messages, chroma_store, documents, Document
 from app.errors import document_not_found, document_resyncing, document_error
 from app.models import ChatRequest, ChatResponse
 from app.services import rag_service
@@ -54,7 +54,7 @@ async def create_document(
     """
     content = body.get("content", "")
     # Allow empty content creation — resync will handle validation later.
-    doc_id = __import__("uuid").uuid4().hex[:12]
+    doc_id = uuid.uuid4().hex[:12]
     # Use db.create-like inline to keep owner scoping
     from app.db import Document as DocModel
     doc = DocModel(id=doc_id, owner_id=user.id, content=content, status="ready")
@@ -90,19 +90,6 @@ async def create_document(
     return {"document_id": doc_id, "status": doc.status}
 
 
-@router.get("/{document_id}/history")
-async def get_history(
-    document_id: str = Path(...),
-    user: CurrentUser = Depends(get_current_user),
-):
-    doc = _get_document_or_404(document_id, user)
-    rows = get_messages_for_document(document_id, include_archived=False)
-    return {
-        "document_id": document_id,
-        "messages": [{"role": m.role, "content": m.content} for m in rows],
-    }
-
-
 @router.post("/{document_id}/ask", response_model=ChatResponse)
 async def ask_document(
     body: ChatRequest,
@@ -129,23 +116,11 @@ async def ask_document(
 
     # Use per-document store if available else global
     active_store = store if (store and store.index is not None) else rag_service.store
-    # Persist incoming chat turn? The spec doesn't require persisting via ask, but history should reflect asks.
-    # We store messages for future history calls.
-    from app.db import add_chat_message
-    # Store user message
-    add_chat_message(document_id, user.id, "user", body.question)
 
     question = body.question
     chat_history = body.chat_history
     summary = active_store.summary if active_store else ""
-    try:
-        answer = rag_service.run_corrective_rag(question, chat_history, summary, active_store)
-    except Exception as exc:
-        # If LLM unavailable etc, propagate as AppError; don't archive.
-        # Remove the just-added user message? Keep for debugging.
-        raise exc
-
-    add_chat_message(document_id, user.id, "assistant", answer)
+    answer = rag_service.run_corrective_rag(question, chat_history, summary, active_store)
     return ChatResponse(answer=answer)
 
 

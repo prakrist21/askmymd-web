@@ -41,7 +41,7 @@ def clear_all() -> None:
     chroma_store.clear()
 
 def create_document(owner_id: str, content: str, status: str = "ready") -> Document:
-    doc_id = str(uuid.uuid4())
+    doc_id = uuid.uuid4().hex[:12]
     doc = Document(id=doc_id, owner_id=owner_id, content=content, status=status)
     documents[doc_id] = doc
     return doc
@@ -57,11 +57,6 @@ def add_chat_message(document_id: str, owner_id: str, role: str, content: str, i
     )
     chat_messages.append(row)
     return row
-
-def get_messages_for_document(document_id: str, include_archived: bool = False) -> List[ChatMessageRow]:
-    if include_archived:
-        return [m for m in chat_messages if m.document_id == document_id]
-    return [m for m in chat_messages if m.document_id == document_id and not m.is_archived]
 
 def archive_messages(document_id: str) -> int:
     count = 0
