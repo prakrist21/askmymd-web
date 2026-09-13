@@ -392,9 +392,12 @@ function resolveLocalImages(container: HTMLElement) {
         (img as HTMLImageElement).src = dataUrl;
       } else {
         const placeholder = document.createElement("div");
-        placeholder.textContent = `🖼️ Image not found: ${id} — re-upload to restore`;
         placeholder.style.cssText =
-          "padding:0.75rem; border:1px dashed #f59e0b; background:#fef3c7; color:#92400e; border-radius:6px; margin:0.75rem 0; font-size:0.875rem; font-family:'Inter',sans-serif;";
+          "display:flex; align-items:center; gap:0.5rem; padding:0.75rem; border:1px dashed #f59e0b; background:#fef3c7; color:#92400e; border-radius:6px; margin:0.75rem 0; font-size:0.875rem; font-family:'Inter',sans-serif;";
+        placeholder.innerHTML =
+          '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path><line x1="2" y1="2" x2="22" y2="22"></line></svg><span>Image not found: ' +
+          id.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;") +
+          " — re-upload to restore</span>";
         img.replaceWith(placeholder);
       }
     }

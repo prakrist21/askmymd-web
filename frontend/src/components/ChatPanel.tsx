@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy, Loader2, RefreshCw, X } from "lucide-react";
+import { Check, Copy, Loader2, MessageCircle, RefreshCw, X } from "lucide-react";
 import {
   ApiError,
   createDocument,
@@ -326,8 +326,8 @@ export default function ChatPanel({
         </div>
       </div>
 
-      {/* Confirmation dialog */}
-      {showResyncConfirm && (
+      {/* Confirmation dialog — hidden while resyncing so the spinner replaces the message list */}
+      {showResyncConfirm && !isResyncing && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/40 px-6">
           <div className={`w-full max-w-sm rounded-lg border p-4 shadow-xl ${isDark ? "border-slate-700 bg-slate-800" : "border-gray-200 bg-white"}`}>
             <p className={`text-sm ${isDark ? "text-slate-100" : "text-gray-900"}`}>This will clear the current chat and re-index the document. Continue?</p>
@@ -365,9 +365,17 @@ export default function ChatPanel({
           <button
             type="button"
             onClick={handlePrepare}
-            className="rounded-lg bg-emerald-500 px-5 py-3 text-sm font-medium text-slate-950 transition-colors hover:bg-emerald-400"
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-5 py-3 text-sm font-medium text-slate-950 transition-colors hover:bg-emerald-400"
           >
-            {rePrepareNeeded ? "🔄 Re-prepare document" : "💬 Chat with this document"}
+            {rePrepareNeeded ? (
+              <>
+                <RefreshCw className="h-4 w-4" aria-hidden="true" /> Re-prepare document
+              </>
+            ) : (
+              <>
+                <MessageCircle className="h-4 w-4" aria-hidden="true" /> Chat with this document
+              </>
+            )}
           </button>
           <p className={`text-xs ${isDark ? "text-slate-500" : "text-gray-500"}`}>
             Analyzes the markdown in the editor, then answers questions about
@@ -396,67 +404,68 @@ export default function ChatPanel({
 
       {phase === "ready" && (
         <>
-          <div ref={scrollRef} className={`relative min-h-0 flex-1 space-y-3 overflow-y-auto p-4 ${isDark ? "bg-slate-900" : "bg-white"}`}>
-            {isResyncing && (
-              <div className={`absolute inset-0 z-5 flex flex-col items-center justify-center gap-3 ${isDark ? "bg-slate-900/80" : "bg-white/80"} backdrop-blur-sm`}>
-                <Loader2 className={`h-8 w-8 animate-spin ${isDark ? "text-emerald-400" : "text-emerald-600"}`} />
-                <p className={`text-sm font-medium ${isDark ? "text-slate-300" : "text-gray-600"}`}>Resyncing document...</p>
-              </div>
-            )}
-            {messages.length === 0 && !isResyncing && !pending ? (
-              <p className={`py-8 text-center text-sm ${isDark ? "text-slate-500" : "text-gray-400"}`}>No messages yet — ask something about the document.</p>
-            ) : (
-              messages.map((msg, i) => {
-                const isUser = msg.role === "user";
-                if (isUser) {
+          {isResyncing ? (
+            <div className={`flex flex-1 flex-col items-center justify-center gap-3 ${isDark ? "bg-slate-900" : "bg-white"}`}>
+              <Loader2 className={`h-8 w-8 animate-spin ${isDark ? "text-emerald-400" : "text-emerald-600"}`} />
+              <p className={`text-sm font-medium ${isDark ? "text-slate-300" : "text-gray-600"}`}>Resyncing document...</p>
+            </div>
+          ) : (
+            <div ref={scrollRef} className={`min-h-0 flex-1 space-y-3 overflow-y-auto p-4 ${isDark ? "bg-slate-900" : "bg-white"}`}>
+              {messages.length === 0 && !pending ? (
+                <p className={`py-8 text-center text-sm ${isDark ? "text-slate-500" : "text-gray-400"}`}>No messages yet — ask something about the document.</p>
+              ) : (
+                messages.map((msg, i) => {
+                  const isUser = msg.role === "user";
+                  if (isUser) {
+                    return (
+                      <div
+                        key={i}
+                        className={
+                          isDark
+                            ? "ml-auto max-w-[85%] rounded-2xl rounded-br-sm border border-emerald-600/30 bg-emerald-900/30 px-3 py-2 text-sm break-words whitespace-pre-wrap text-slate-100"
+                            : "ml-auto max-w-[85%] rounded-2xl rounded-br-sm border border-emerald-500/30 bg-emerald-50 px-3 py-2 text-sm break-words whitespace-pre-wrap text-gray-900"
+                        }
+                      >
+                        {msg.content}
+                      </div>
+                    );
+                  }
+                  const isCopied = copiedIdx === i;
                   return (
-                    <div
-                      key={i}
-                      className={
-                        isDark
-                          ? "ml-auto max-w-[85%] rounded-2xl rounded-br-sm border border-emerald-600/30 bg-emerald-900/30 px-3 py-2 text-sm break-words whitespace-pre-wrap text-slate-100"
-                          : "ml-auto max-w-[85%] rounded-2xl rounded-br-sm border border-emerald-500/30 bg-emerald-50 px-3 py-2 text-sm break-words whitespace-pre-wrap text-gray-900"
-                      }
-                    >
-                      {msg.content}
+                    <div key={i} className="mr-auto max-w-[85%] space-y-1">
+                      <div
+                        className={
+                          isDark
+                            ? "rounded-2xl rounded-bl-sm border border-slate-700 bg-slate-800 px-3 py-2 text-sm break-words whitespace-pre-wrap text-slate-100"
+                            : "rounded-2xl rounded-bl-sm border border-gray-200 bg-gray-100 px-3 py-2 text-sm break-words whitespace-pre-wrap text-gray-900"
+                        }
+                      >
+                        {msg.content}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(msg.content, i)}
+                        aria-label={isCopied ? "Copied" : "Copy response"}
+                        className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors ${
+                          isDark
+                            ? "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                            : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                        }`}
+                      >
+                        {isCopied ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
+                        {isCopied ? "Copied" : "Copy"}
+                      </button>
                     </div>
                   );
-                }
-                const isCopied = copiedIdx === i;
-                return (
-                  <div key={i} className="mr-auto max-w-[85%] space-y-1">
-                    <div
-                      className={
-                        isDark
-                          ? "rounded-2xl rounded-bl-sm border border-slate-700 bg-slate-800 px-3 py-2 text-sm break-words whitespace-pre-wrap text-slate-100"
-                          : "rounded-2xl rounded-bl-sm border border-gray-200 bg-gray-100 px-3 py-2 text-sm break-words whitespace-pre-wrap text-gray-900"
-                      }
-                    >
-                      {msg.content}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleCopy(msg.content, i)}
-                      aria-label={isCopied ? "Copied" : "Copy response"}
-                      className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs transition-colors ${
-                        isDark
-                          ? "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-                          : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-                      }`}
-                    >
-                      {isCopied ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
-                      {isCopied ? "Copied" : "Copy"}
-                    </button>
-                  </div>
-                );
-              })
-            )}
-            {pending && !isResyncing && (
-              <div className={`mr-auto animate-pulse rounded-2xl rounded-bl-sm border px-3 py-2 text-sm ${isDark ? "border-slate-700 bg-slate-800 text-slate-400" : "border-gray-200 bg-gray-100 text-gray-500"}`}>
-                Thinking…
-              </div>
-            )}
-          </div>
+                })
+              )}
+              {pending && (
+                <div className={`mr-auto animate-pulse rounded-2xl rounded-bl-sm border px-3 py-2 text-sm ${isDark ? "border-slate-700 bg-slate-800 text-slate-400" : "border-gray-200 bg-gray-100 text-gray-500"}`}>
+                  Thinking…
+                </div>
+              )}
+            </div>
+          )}
 
           {error && (
             <p className={`border-t px-4 py-2 text-xs ${isDark ? "border-slate-800 text-red-400" : "border-gray-200 text-red-600"}`}>
