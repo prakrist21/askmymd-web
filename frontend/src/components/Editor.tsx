@@ -5,9 +5,10 @@ interface EditorProps {
   onChange: (value: string) => void;
   isDark: boolean;
   editorRef?: React.RefObject<HTMLTextAreaElement | null>;
+  fontFamily?: string;
 }
 
-export default function Editor({ value, onChange, isDark, editorRef }: EditorProps) {
+export default function Editor({ value, onChange, isDark, editorRef, fontFamily }: EditorProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const internalRef = useRef<HTMLTextAreaElement>(null);
   const textareaRef = editorRef ?? internalRef;
@@ -54,7 +55,8 @@ export default function Editor({ value, onChange, isDark, editorRef }: EditorPro
         onChange={(e) => onChange(e.target.value)}
         placeholder="Paste or type markdown here, or upload a .md file…"
         spellCheck={false}
-        className={`min-h-0 w-full flex-1 resize-none overflow-auto p-4 font-mono text-sm focus:outline-none ${isDark ? "bg-slate-950 text-slate-200 placeholder:text-slate-600" : "bg-white text-gray-900 placeholder:text-gray-400"}`}
+        style={fontFamily ? { fontFamily } : undefined}
+        className={`min-h-0 w-full flex-1 resize-none overflow-auto p-4 text-sm focus:outline-none ${isDark ? "bg-slate-950 text-slate-200 placeholder:text-slate-600" : "bg-white text-gray-900 placeholder:text-gray-400"}`}
       />
     </div>
   );

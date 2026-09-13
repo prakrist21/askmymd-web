@@ -35,6 +35,8 @@ const DOCUMENT_ID_KEY = "askmymd.document_id";
  * if needed (still client-side only).
  */
 const MESSAGES_DOCUMENT_ID_KEY = "askmymd.messages_document_id";
+const EDITOR_FONT_KEY = "askmymd.editor_font";
+const PREVIEW_FONT_KEY = "askmymd.preview_font";
 
 /** One chat bubble. Shared by ChatPanel and the persistence helpers. */
 export interface ChatMessage {
@@ -178,6 +180,30 @@ export function saveMessagesDocumentId(id: string | null) {
 export function loadStoredMessagesDocumentId(): string | null {
   try {
     return localStorage.getItem(MESSAGES_DOCUMENT_ID_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function saveEditorFont(id: string) {
+  save(EDITOR_FONT_KEY, id);
+}
+
+export function loadStoredEditorFont(): string | null {
+  try {
+    return localStorage.getItem(EDITOR_FONT_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function savePreviewFont(id: string) {
+  save(PREVIEW_FONT_KEY, id);
+}
+
+export function loadStoredPreviewFont(): string | null {
+  try {
+    return localStorage.getItem(PREVIEW_FONT_KEY);
   } catch {
     return null;
   }

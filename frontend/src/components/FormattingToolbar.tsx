@@ -20,18 +20,37 @@ import {
   Redo2,
   SeparatorHorizontal,
   ListChecks,
+  Type,
+  BookOpen,
+  Check,
 } from "lucide-react";
 import { generateImageId, setImage } from "../imageStore";
+import { EDITOR_FONTS, PREVIEW_FONTS } from "../fonts";
 
 interface FormattingToolbarProps {
   editorRef: React.RefObject<HTMLTextAreaElement | null>;
   value: string;
   onChange: (value: string) => void;
   isDark: boolean;
+  editorFontId: string;
+  previewFontId: string;
+  onEditorFontChange: (id: string) => void;
+  onPreviewFontChange: (id: string) => void;
 }
 
-export default function FormattingToolbar({ editorRef, value, onChange, isDark }: FormattingToolbarProps) {
+export default function FormattingToolbar({
+  editorRef,
+  value,
+  onChange,
+  isDark,
+  editorFontId,
+  previewFontId,
+  onEditorFontChange,
+  onPreviewFontChange,
+}: FormattingToolbarProps) {
   const [headingOpen, setHeadingOpen] = useState(false);
+  const [editorFontOpen, setEditorFontOpen] = useState(false);
+  const [previewFontOpen, setPreviewFontOpen] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [imageMode, setImageMode] = useState<"choice" | "upload" | "url">("choice");
   const [imageAlt, setImageAlt] = useState("alt text");
@@ -573,146 +592,277 @@ export default function FormattingToolbar({ editorRef, value, onChange, isDark }
   const btnBase = `inline-flex items-center justify-center rounded-md p-1.5 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 ${
     isDark ? "text-slate-300 hover:bg-slate-800 hover:text-slate-100" : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
   }`;
-  const divider = isDark ? "border-slate-800" : "border-gray-200";
+  const dividerClass = isDark ? "bg-slate-700" : "bg-gray-200";
   const canUndo = historyIndexRef.current > 0;
   const canRedo = historyIndexRef.current < historyRef.current.length - 1;
 
   return (
     <>
       <div
-        className={`sticky top-14 z-20 flex flex-wrap items-center gap-1 border-b px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-opacity-80 ${isDark ? "border-slate-800 bg-slate-900/95" : "border-gray-200 bg-white/95"}`}
+        className={`sticky top-14 z-20 flex flex-wrap items-center gap-1.5 border-b px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-opacity-80 ${isDark ? "border-slate-800 bg-slate-900/95" : "border-gray-200 bg-white/95"}`}
         role="toolbar"
         aria-label="Formatting toolbar"
       >
-        <button
-          type="button"
-          onClick={handleUndo}
-          disabled={!canUndo}
-          title="Undo (Ctrl+Z)"
-          aria-label="Undo"
-          className={`${btnBase} ${!canUndo ? "opacity-40 cursor-not-allowed" : ""}`}
-        >
-          <Undo2 className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          onClick={handleRedo}
-          disabled={!canRedo}
-          title="Redo (Ctrl+Shift+Z)"
-          aria-label="Redo"
-          className={`${btnBase} ${!canRedo ? "opacity-40 cursor-not-allowed" : ""}`}
-        >
-          <Redo2 className="h-4 w-4" />
-        </button>
-
-        <span className={`mx-1 h-5 w-px ${divider} border-l`} aria-hidden="true" />
-
-        <button type="button" onClick={handleBold} title="Bold (Ctrl+B)" aria-label="Bold" className={btnBase}>
-          <Bold className="h-4 w-4" />
-        </button>
-        <button type="button" onClick={handleItalic} title="Italic (Ctrl+I)" aria-label="Italic" className={btnBase}>
-          <Italic className="h-4 w-4" />
-        </button>
-        <button type="button" onClick={handleStrike} title="Strikethrough" aria-label="Strikethrough" className={btnBase}>
-          <Strikethrough className="h-4 w-4" />
-        </button>
-        <button type="button" onClick={handleInlineCode} title="Inline code" aria-label="Inline code" className={btnBase}>
-          <Code className="h-4 w-4" />
-        </button>
-
-        <span className={`mx-1 h-5 w-px ${divider} border-l`} aria-hidden="true" />
-
-        <div className="relative">
+        {/* Group: History */}
+        <div className="flex items-center gap-0.5">
           <button
             type="button"
-            onClick={() => setHeadingOpen((o) => !o)}
-            onBlur={() => setTimeout(() => setHeadingOpen(false), 150)}
-            title="Headings"
-            aria-label="Headings"
-            aria-expanded={headingOpen}
-            aria-haspopup="menu"
-            className={btnBase}
+            onClick={handleUndo}
+            disabled={!canUndo}
+            title="Undo (Ctrl+Z)"
+            aria-label="Undo"
+            className={`${btnBase} ${!canUndo ? "opacity-40 cursor-not-allowed" : ""}`}
           >
-            <Heading1 className="h-4 w-4" />
-            <ChevronDown className="h-3 w-3 opacity-60" />
+            <Undo2 className="h-4 w-4" />
           </button>
-          {headingOpen && (
-            <div
-              role="menu"
-              className={`absolute left-0 top-full mt-1 w-36 rounded-md border py-1 shadow-lg ${isDark ? "border-slate-700 bg-slate-800" : "border-gray-200 bg-white"}`}
-            >
-              <button
-                role="menuitem"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  handleHeading(1);
-                  setHeadingOpen(false);
-                }}
-                className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm ${isDark ? "hover:bg-slate-700 text-slate-200" : "hover:bg-gray-100 text-gray-700"}`}
-              >
-                <Heading1 className="h-4 w-4" /> H1
-              </button>
-              <button
-                role="menuitem"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  handleHeading(2);
-                  setHeadingOpen(false);
-                }}
-                className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm ${isDark ? "hover:bg-slate-700 text-slate-200" : "hover:bg-gray-100 text-gray-700"}`}
-              >
-                <Heading2 className="h-4 w-4" /> H2
-              </button>
-              <button
-                role="menuitem"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  handleHeading(3);
-                  setHeadingOpen(false);
-                }}
-                className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm ${isDark ? "hover:bg-slate-700 text-slate-200" : "hover:bg-gray-100 text-gray-700"}`}
-              >
-                <Heading3 className="h-4 w-4" /> H3
-              </button>
-            </div>
-          )}
+          <button
+            type="button"
+            onClick={handleRedo}
+            disabled={!canRedo}
+            title="Redo (Ctrl+Shift+Z)"
+            aria-label="Redo"
+            className={`${btnBase} ${!canRedo ? "opacity-40 cursor-not-allowed" : ""}`}
+          >
+            <Redo2 className="h-4 w-4" />
+          </button>
         </div>
 
-        <span className={`mx-1 h-5 w-px ${divider} border-l`} aria-hidden="true" />
+        <div className={`h-6 w-px shrink-0 ${dividerClass}`} aria-hidden="true" />
 
-        <button type="button" onClick={handleBulletList} title="Bullet list" aria-label="Bullet list" className={btnBase}>
-          <List className="h-4 w-4" />
-        </button>
-        <button type="button" onClick={handleOrderedList} title="Numbered list" aria-label="Numbered list" className={btnBase}>
-          <ListOrdered className="h-4 w-4" />
-        </button>
-        <button type="button" onClick={handleTaskList} title="Task list" aria-label="Task list" className={btnBase}>
-          <ListChecks className="h-4 w-4" />
-        </button>
-        <button type="button" onClick={handleBlockquote} title="Blockquote" aria-label="Blockquote" className={btnBase}>
-          <Quote className="h-4 w-4" />
-        </button>
-        <button type="button" onClick={handleHorizontalRule} title="Horizontal rule" aria-label="Horizontal rule" className={btnBase}>
-          <SeparatorHorizontal className="h-4 w-4" />
-        </button>
+        {/* Group: Text formatting */}
+        <div className="flex items-center gap-0.5">
+          <button type="button" onClick={handleBold} title="Bold (Ctrl+B)" aria-label="Bold" className={btnBase}>
+            <Bold className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={handleItalic} title="Italic (Ctrl+I)" aria-label="Italic" className={btnBase}>
+            <Italic className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={handleStrike} title="Strikethrough" aria-label="Strikethrough" className={btnBase}>
+            <Strikethrough className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={handleInlineCode} title="Inline code" aria-label="Inline code" className={btnBase}>
+            <Code className="h-4 w-4" />
+          </button>
+        </div>
 
-        <span className={`mx-1 h-5 w-px ${divider} border-l`} aria-hidden="true" />
+        <div className={`h-6 w-px shrink-0 ${dividerClass}`} aria-hidden="true" />
 
-        <button type="button" onClick={handleLink} title="Link (Ctrl+K)" aria-label="Link" className={btnBase}>
-          <Link2 className="h-4 w-4" />
-        </button>
-        <button type="button" onClick={handleCodeBlock} title="Code block" aria-label="Code block" className={btnBase}>
-          <FileCode className="h-4 w-4" />
-        </button>
+        {/* Group: Structure — headings, quote, divider */}
+        <div className="flex items-center gap-0.5">
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setHeadingOpen((o) => !o)}
+              onBlur={() => setTimeout(() => setHeadingOpen(false), 150)}
+              title="Headings"
+              aria-label="Headings"
+              aria-expanded={headingOpen}
+              aria-haspopup="menu"
+              className={btnBase}
+            >
+              <Heading1 className="h-4 w-4" />
+              <ChevronDown className="h-3 w-3 opacity-60" />
+            </button>
+            {headingOpen && (
+              <div
+                role="menu"
+                className={`absolute left-0 top-full mt-1 w-36 rounded-md border py-1 shadow-lg ${isDark ? "border-slate-700 bg-slate-800" : "border-gray-200 bg-white"}`}
+              >
+                <button
+                  role="menuitem"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleHeading(1);
+                    setHeadingOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm ${isDark ? "hover:bg-slate-700 text-slate-200" : "hover:bg-gray-100 text-gray-700"}`}
+                >
+                  <Heading1 className="h-4 w-4" /> H1
+                </button>
+                <button
+                  role="menuitem"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleHeading(2);
+                    setHeadingOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm ${isDark ? "hover:bg-slate-700 text-slate-200" : "hover:bg-gray-100 text-gray-700"}`}
+                >
+                  <Heading2 className="h-4 w-4" /> H2
+                </button>
+                <button
+                  role="menuitem"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleHeading(3);
+                    setHeadingOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-2 px-3 py-1.5 text-sm ${isDark ? "hover:bg-slate-700 text-slate-200" : "hover:bg-gray-100 text-gray-700"}`}
+                >
+                  <Heading3 className="h-4 w-4" /> H3
+                </button>
+              </div>
+            )}
+          </div>
+          <button type="button" onClick={handleBlockquote} title="Blockquote" aria-label="Blockquote" className={btnBase}>
+            <Quote className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={handleHorizontalRule} title="Horizontal rule" aria-label="Horizontal rule" className={btnBase}>
+            <SeparatorHorizontal className="h-4 w-4" />
+          </button>
+        </div>
 
-        <span className={`mx-1 h-5 w-px ${divider} border-l`} aria-hidden="true" />
+        <div className={`h-6 w-px shrink-0 ${dividerClass}`} aria-hidden="true" />
 
-        <button type="button" onClick={handleImage} title="Image" aria-label="Image" className={btnBase}>
-          <ImageIcon className="h-4 w-4" />
-        </button>
-        <button type="button" onClick={handleTable} title="Table" aria-label="Table" className={btnBase}>
-          <TableIcon className="h-4 w-4" />
-        </button>
+        {/* Group: Lists */}
+        <div className="flex items-center gap-0.5">
+          <button type="button" onClick={handleBulletList} title="Bullet list" aria-label="Bullet list" className={btnBase}>
+            <List className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={handleOrderedList} title="Numbered list" aria-label="Numbered list" className={btnBase}>
+            <ListOrdered className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={handleTaskList} title="Task list" aria-label="Task list" className={btnBase}>
+            <ListChecks className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className={`h-6 w-px shrink-0 ${dividerClass}`} aria-hidden="true" />
+
+        {/* Group: Insert — link, code */}
+        <div className="flex items-center gap-0.5">
+          <button type="button" onClick={handleLink} title="Link (Ctrl+K)" aria-label="Link" className={btnBase}>
+            <Link2 className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={handleCodeBlock} title="Code block" aria-label="Code block" className={btnBase}>
+            <FileCode className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className={`h-6 w-px shrink-0 ${dividerClass}`} aria-hidden="true" />
+
+        {/* Group: Media — image, table */}
+        <div className="flex items-center gap-0.5">
+          <button type="button" onClick={handleImage} title="Image" aria-label="Image" className={btnBase}>
+            <ImageIcon className="h-4 w-4" />
+          </button>
+          <button type="button" onClick={handleTable} title="Table" aria-label="Table" className={btnBase}>
+            <TableIcon className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className={`h-6 w-px shrink-0 ${dividerClass}`} aria-hidden="true" />
+
+        {/* Group: Fonts — editor & preview (independent, new cluster at end) */}
+        <div className="flex items-center gap-1">
+          {/* Editor font picker */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setEditorFontOpen((o) => !o);
+                setPreviewFontOpen(false);
+                setHeadingOpen(false);
+              }}
+              onBlur={() => setTimeout(() => setEditorFontOpen(false), 150)}
+              title="Editor font"
+              aria-label="Editor font"
+              aria-expanded={editorFontOpen}
+              aria-haspopup="menu"
+              className={`${btnBase} gap-1.5 px-2`}
+            >
+              <Type className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline text-xs font-medium">Editor font</span>
+              <ChevronDown className="h-3 w-3 opacity-60" />
+            </button>
+            {editorFontOpen && (
+              <div
+                role="menu"
+                className={`absolute right-0 top-full z-30 mt-1 w-60 rounded-md border py-1 shadow-lg ${isDark ? "border-slate-700 bg-slate-800" : "border-gray-200 bg-white"}`}
+              >
+                <div className={`px-3 pt-3 pb-2.5 text-[10px] font-normal uppercase tracking-widest ${isDark ? "text-slate-500" : "text-gray-400"}`}>Editor font</div>
+                <div className={`h-px shrink-0 ${dividerClass}`} aria-hidden="true" />
+                {EDITOR_FONTS.map((f) => {
+                  const selected = f.id === editorFontId;
+                  return (
+                    <button
+                      key={f.id}
+                      role="menuitem"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        onEditorFontChange(f.id);
+                        setEditorFontOpen(false);
+                      }}
+                      className={`flex w-full items-center justify-between px-3 py-1.5 text-sm ${selected ? (isDark ? "bg-slate-700 text-emerald-400" : "bg-gray-100 text-emerald-600") : isDark ? "text-slate-200 hover:bg-slate-700" : "text-gray-700 hover:bg-gray-100"}`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span style={{ fontFamily: f.family }} className="text-sm">
+                          {f.label}
+                        </span>
+                        <span className={`text-[10px] uppercase tracking-wide ${isDark ? "text-slate-500" : "text-gray-400"}`}>{f.category}</span>
+                      </span>
+                      {selected && <Check className="h-4 w-4 shrink-0" aria-hidden="true" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Preview font picker */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => {
+                setPreviewFontOpen((o) => !o);
+                setEditorFontOpen(false);
+                setHeadingOpen(false);
+              }}
+              onBlur={() => setTimeout(() => setPreviewFontOpen(false), 150)}
+              title="Preview font"
+              aria-label="Preview font"
+              aria-expanded={previewFontOpen}
+              aria-haspopup="menu"
+              className={`${btnBase} gap-1.5 px-2`}
+            >
+              <BookOpen className="h-4 w-4 shrink-0" />
+              <span className="hidden sm:inline text-xs font-medium">Preview font</span>
+              <ChevronDown className="h-3 w-3 opacity-60" />
+            </button>
+            {previewFontOpen && (
+              <div
+                role="menu"
+                className={`absolute right-0 top-full z-30 mt-1 w-60 rounded-md border py-1 shadow-lg ${isDark ? "border-slate-700 bg-slate-800" : "border-gray-200 bg-white"}`}
+              >
+                <div className={`px-3 pt-3 pb-2.5 text-[10px] font-normal uppercase tracking-widest ${isDark ? "text-slate-500" : "text-gray-400"}`}>Preview font</div>
+                <div className={`h-px shrink-0 ${dividerClass}`} aria-hidden="true" />
+                {PREVIEW_FONTS.map((f) => {
+                  const selected = f.id === previewFontId;
+                  return (
+                    <button
+                      key={f.id}
+                      role="menuitem"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        onPreviewFontChange(f.id);
+                        setPreviewFontOpen(false);
+                      }}
+                      className={`flex w-full items-center justify-between px-3 py-1.5 text-sm ${selected ? (isDark ? "bg-slate-700 text-emerald-400" : "bg-gray-100 text-emerald-600") : isDark ? "text-slate-200 hover:bg-slate-700" : "text-gray-700 hover:bg-gray-100"}`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span style={{ fontFamily: f.family }} className="text-sm">
+                          {f.label}
+                        </span>
+                        <span className={`text-[10px] uppercase tracking-wide ${isDark ? "text-slate-500" : "text-gray-400"}`}>{f.category}</span>
+                      </span>
+                      {selected && <Check className="h-4 w-4 shrink-0" aria-hidden="true" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {showImageComingSoon && (

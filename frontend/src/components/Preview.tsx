@@ -17,6 +17,7 @@ export type PreviewTheme = "dark" | "light";
 interface PreviewProps {
   content: string;
   isDark: boolean;
+  fontFamily?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -419,7 +420,7 @@ function resolveLocalImages(container: HTMLElement) {
  * their lifecycle, and the whole subtree is rebuilt on every content
  * change, so React reconciliation would only fight the renderer.
  */
-export default function Preview({ content, isDark }: PreviewProps) {
+export default function Preview({ content, isDark, fontFamily }: PreviewProps) {
   const previewRef = useRef<HTMLDivElement>(null);
   const theme: PreviewTheme = isDark ? "dark" : "light";
 
@@ -525,6 +526,7 @@ export default function Preview({ content, isDark }: PreviewProps) {
       <div
         ref={previewRef}
         className={`preview-container min-h-0 flex-1 overflow-auto markdown-body ${isDark ? "dark" : "light"}`}
+        style={fontFamily ? { fontFamily } : undefined}
       />
     </div>
   );

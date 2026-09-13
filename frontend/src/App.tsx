@@ -7,13 +7,22 @@ import Preview from "./components/Preview";
 import ResizableSplit from "./components/ResizableSplit";
 import {
   loadStoredDocumentId,
+  loadStoredEditorFont,
   loadStoredMarkdown,
   loadStoredPrepared,
+  loadStoredPreviewFont,
   loadStoredTheme,
   saveDocumentId,
+  saveEditorFont,
   saveMarkdown,
+  savePreviewFont,
   saveTheme,
 } from "./storage";
+import {
+  DEFAULT_EDITOR_FONT_ID,
+  DEFAULT_PREVIEW_FONT_ID,
+  getFontFamily,
+} from "./fonts";
 
 export default function App() {
   const [markdown, setMarkdown] = useState<string>(() => loadStoredMarkdown());
@@ -39,10 +48,20 @@ export default function App() {
   //   practice a new ID only appears after clearing storage or via future upload flow.
   // This state mirrors localStorage so ChatPanel can scope history by ID instead of markdown.
   const [documentId, setDocumentId] = useState<string | null>(() => loadStoredDocumentId());
+  const [editorFontId, setEditorFontId] = useState<string>(() => loadStoredEditorFont() ?? DEFAULT_EDITOR_FONT_ID);
+  const [previewFontId, setPreviewFontId] = useState<string>(() => loadStoredPreviewFont() ?? DEFAULT_PREVIEW_FONT_ID);
 
   useEffect(() => {
     saveTheme(theme);
   }, [theme]);
+
+  useEffect(() => {
+    saveEditorFont(editorFontId);
+  }, [editorFontId]);
+
+  useEffect(() => {
+    savePreviewFont(previewFontId);
+  }, [previewFontId]);
 
   // Persist the document so a refresh restores the editor.
   useEffect(() => {
@@ -86,7 +105,16 @@ export default function App() {
         isDark={isDark}
         onToggleTheme={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
       />
-      <FormattingToolbar editorRef={editorRef} value={markdown} onChange={setMarkdown} isDark={isDark} />
+      <FormattingToolbar
+        editorRef={editorRef}
+        value={markdown}
+        onChange={setMarkdown}
+        isDark={isDark}
+        editorFontId={editorFontId}
+        previewFontId={previewFontId}
+        onEditorFontChange={setEditorFontId}
+        onPreviewFontChange={setPreviewFontId}
+      />
       {docError && (
         <div className={`flex items-center justify-between gap-3 border-b px-6 py-2 text-sm ${isDark ? "border-red-900/60 bg-red-950/60 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>
           <span>{docError}</span>
@@ -105,8 +133,22 @@ export default function App() {
       <main className={`flex min-h-0 flex-1 ${isDark ? "bg-slate-950" : "bg-white"}`}>
         <ResizableSplit
           isDark={isDark}
-          left={<Editor value={markdown} onChange={setMarkdown} isDark={isDark} editorRef={editorRef} />}
-          right={<Preview content={markdown} isDark={isDark} />}
+          left={
+            <Editor
+              value={markdown}
+              onChange={setMarkdown}
+              isDark={isDark}
+              editorRef={editorRef}
+              fontFamily={getFontFamily(editorFontId, DEFAULT_EDITOR_FONT_ID)}
+            />
+          }
+          right={
+            <Preview
+              content={markdown}
+              isDark={isDark}
+              fontFamily={getFontFamily(previewFontId, DEFAULT_PREVIEW_FONT_ID)}
+            />
+          }
         />
       </main>
 
