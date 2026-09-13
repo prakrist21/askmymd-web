@@ -50,6 +50,8 @@ export default function App() {
   const [documentId, setDocumentId] = useState<string | null>(() => loadStoredDocumentId());
   const [editorFontId, setEditorFontId] = useState<string>(() => loadStoredEditorFont() ?? DEFAULT_EDITOR_FONT_ID);
   const [previewFontId, setPreviewFontId] = useState<string>(() => loadStoredPreviewFont() ?? DEFAULT_PREVIEW_FONT_ID);
+  const [expandedPane, setExpandedPane] = useState<null | "editor" | "preview">(null);
+  const [splitFraction, setSplitFraction] = useState(0.5);
 
   useEffect(() => {
     saveTheme(theme);
@@ -129,27 +131,56 @@ export default function App() {
       )}
 
       {/* Editor + Preview fill the full width; the chat is no longer a
-           permanent sidebar. */}
+           permanent sidebar. Expanding a pane hides the other at full width;
+           Back restores the split with the previous fraction preserved. */}
       <main className={`flex min-h-0 flex-1 ${isDark ? "bg-slate-950" : "bg-white"}`}>
-        <ResizableSplit
-          isDark={isDark}
-          left={
+        {expandedPane === "editor" ? (
+          <div className="flex min-h-0 flex-1">
             <Editor
               value={markdown}
               onChange={setMarkdown}
               isDark={isDark}
               editorRef={editorRef}
               fontFamily={getFontFamily(editorFontId, DEFAULT_EDITOR_FONT_ID)}
+              isExpanded
+              onCollapse={() => setExpandedPane(null)}
             />
-          }
-          right={
+          </div>
+        ) : expandedPane === "preview" ? (
+          <div className="flex min-h-0 flex-1">
             <Preview
               content={markdown}
               isDark={isDark}
               fontFamily={getFontFamily(previewFontId, DEFAULT_PREVIEW_FONT_ID)}
+              isExpanded
+              onCollapse={() => setExpandedPane(null)}
             />
-          }
-        />
+          </div>
+        ) : (
+          <ResizableSplit
+            isDark={isDark}
+            fraction={splitFraction}
+            onFractionChange={setSplitFraction}
+            left={
+              <Editor
+                value={markdown}
+                onChange={setMarkdown}
+                isDark={isDark}
+                editorRef={editorRef}
+                fontFamily={getFontFamily(editorFontId, DEFAULT_EDITOR_FONT_ID)}
+                onExpand={() => setExpandedPane("editor")}
+              />
+            }
+            right={
+              <Preview
+                content={markdown}
+                isDark={isDark}
+                fontFamily={getFontFamily(previewFontId, DEFAULT_PREVIEW_FONT_ID)}
+                onExpand={() => setExpandedPane("preview")}
+              />
+            }
+          />
+        )}
       </main>
 
       {/* Chat drawer: dimmed backdrop + sliding panel. The panel stays

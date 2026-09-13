@@ -12,12 +12,17 @@ import { attachMermaidToolbar } from "./mermaidToolbar";
 import "github-markdown-css/github-markdown-dark.css";
 import "../styles/preview.css";
 
+import { ArrowLeft, Maximize2 } from "lucide-react";
+
 export type PreviewTheme = "dark" | "light";
 
 interface PreviewProps {
   content: string;
   isDark: boolean;
   fontFamily?: string;
+  onExpand?: () => void;
+  onCollapse?: () => void;
+  isExpanded?: boolean;
 }
 
 /* ------------------------------------------------------------------ */
@@ -420,7 +425,7 @@ function resolveLocalImages(container: HTMLElement) {
  * their lifecycle, and the whole subtree is rebuilt on every content
  * change, so React reconciliation would only fight the renderer.
  */
-export default function Preview({ content, isDark, fontFamily }: PreviewProps) {
+export default function Preview({ content, isDark, fontFamily, onExpand, onCollapse, isExpanded }: PreviewProps) {
   const previewRef = useRef<HTMLDivElement>(null);
   const theme: PreviewTheme = isDark ? "dark" : "light";
 
@@ -517,11 +522,37 @@ export default function Preview({ content, isDark, fontFamily }: PreviewProps) {
   }, [content, theme, isDark]);
 
   return (
-    <div className={`flex h-full min-h-0 flex-col ${isDark ? "bg-slate-950" : "bg-white"}`}>
-      <div className={`shrink-0 border-b px-4 py-2 ${isDark ? "border-slate-800 bg-slate-950" : "border-gray-200 bg-white"}`}>
-        <span className={`text-sm font-semibold tracking-wide uppercase ${isDark ? "text-slate-400" : "text-gray-500"}`}>
-          Preview
-        </span>
+    <div className={`flex h-full min-h-0 w-full flex-1 flex-col ${isDark ? "bg-slate-950" : "bg-white"}`}>
+      <div className={`flex h-10 shrink-0 items-center justify-between border-b px-4 ${isDark ? "border-slate-800 bg-slate-950" : "border-gray-200 bg-white"}`}>
+        <div className="flex items-center gap-2">
+          {isExpanded && onCollapse && (
+            <button
+              type="button"
+              onClick={onCollapse}
+              aria-label="Back to split view"
+              className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${isDark ? "border-slate-700 text-slate-300 hover:bg-slate-800 hover:text-slate-50" : "border-gray-300 text-gray-700 hover:bg-gray-100 hover:text-gray-900 bg-white"}`}
+            >
+              <ArrowLeft className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              Back
+            </button>
+          )}
+          <span className={`text-sm font-semibold tracking-wide uppercase ${isDark ? "text-slate-400" : "text-gray-500"}`}>
+            Preview
+          </span>
+        </div>
+        <div className="flex items-center">
+          {!isExpanded && onExpand && (
+            <button
+              type="button"
+              onClick={onExpand}
+              aria-label="Expand preview"
+              title="Expand preview"
+              className={`rounded p-1.5 transition-colors ${isDark ? "text-slate-400 hover:bg-slate-800 hover:text-slate-100" : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"}`}
+            >
+              <Maximize2 className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
+        </div>
       </div>
       <div
         ref={previewRef}

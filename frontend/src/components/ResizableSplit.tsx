@@ -7,6 +7,8 @@ interface ResizableSplitProps {
   left: React.ReactNode;
   right: React.ReactNode;
   isDark: boolean;
+  fraction?: number;
+  onFractionChange?: (fraction: number) => void;
 }
 
 /**
@@ -14,13 +16,31 @@ interface ResizableSplitProps {
  * a fraction of the container width, clamped so neither pane collapses below
  * the minimum width (dragging to an extreme stops at 20% / 80%).
  */
-export default function ResizableSplit({ left, right, isDark }: ResizableSplitProps) {
+export default function ResizableSplit({ left, right, isDark, fraction: controlledFraction, onFractionChange }: ResizableSplitProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [fraction, setFraction] = useState(0.5);
+  const [internalFraction, setInternalFraction] = useState(controlledFraction ?? 0.5);
   const [isDragging, setIsDragging] = useState(false);
+
+  const isControlled = controlledFraction !== undefined && onFractionChange !== undefined;
+  const fraction = isControlled ? controlledFraction! : internalFraction;
 
   const clamp = useCallback((value: number) =>
     Math.min(MAX_FRACTION, Math.max(MIN_FRACTION, value)), []);
+
+  const setFraction = useCallback(
+    (updater: number | ((prev: number) => number)) => {
+      if (isControlled) {
+        const next = typeof updater === "function" ? (updater as (p: number) => number)(fraction) : updater;
+        onFractionChange!(clamp(next));
+      } else {
+        setInternalFraction((prev) => {
+          const next = typeof updater === "function" ? (updater as (p: number) => number)(prev) : updater;
+          return clamp(next);
+        });
+      }
+    },
+    [isControlled, fraction, onFractionChange, clamp]
+  );
 
   const updateFromPointer = useCallback(
     (clientX: number) => {
@@ -28,7 +48,7 @@ export default function ResizableSplit({ left, right, isDark }: ResizableSplitPr
       if (!rect || rect.width === 0) return;
       setFraction(clamp((clientX - rect.left) / rect.width));
     },
-    [clamp]
+    [clamp, setFraction]
   );
 
   // While dragging, track the pointer anywhere on the page so fast cursor
