@@ -194,8 +194,8 @@ def _build_chat_graph(active_store: RagStore) -> object:
 
     The graph closes over *active_store* instead of the module-global ``store``,
     so callers can thread a per-document RagStore through the retrieval nodes.
-    A fresh graph is built per call to run_corrective_rag; callers pass the
-    store explicitly so retrieval is scoped to the document being asked about.
+    Used by v1 /prepare + /chat (global in-memory FAISS). Stage 5 document
+    retrieval uses _build_chat_graph_for_document (pgvector) instead.
     """
 
     def _retrieve_step(state: ChatState) -> dict:
@@ -239,22 +239,79 @@ def _build_chat_graph(active_store: RagStore) -> object:
     return builder.compile()
 
 
+def _build_chat_graph_for_document(document_id: str) -> object:
+    """Stage 5: pgvector retrieval filtered by document_id.
+
+    Replaces the FAISS store closure. ``_retrieve_step`` now does
+    ``SELECT content FROM chunks WHERE document_id=:id ORDER BY embedding <=> :query_vec LIMIT k``
+    so isolation is enforced by SQL, not by which RagStore object is passed.
+    k=5 normally, k=7 (TOP_K+2) for the rewrite path (both the rewrite's
+    immediate fetch and the following retrieve after rewrite).
+    """
+
+    def _retrieve_step(state: ChatState) -> dict:
+        from app.db import search_chunks
+
+        k = TOP_K + 2 if state["corrections"] > 0 else TOP_K
+        chunks = search_chunks(document_id, state["query"], k=k)
+        logger.info("Retrieve (pgvector): %d chunks (k=%d) for doc %s query %r", len(chunks), k, document_id, state["query"][:80])
+        return {"chunks": chunks}
+
+    def _rewrite_step(state: ChatState) -> dict:
+        from app.db import search_chunks
+
+        query = llm_service.rewrite_query(
+            state["question"], state["chat_history"], state["summary"]
+        )
+        logger.info(
+            "Correction round %d: pgvector re-retrieving with rewritten query for doc %s",
+            state["corrections"] + 1,
+            document_id,
+        )
+        return {
+            "query": query,
+            "chunks": search_chunks(document_id, query, k=TOP_K + 2),
+            "corrections": state["corrections"] + 1,
+        }
+
+    builder = StateGraph(ChatState)
+    builder.add_node("retrieve", _retrieve_step)
+    builder.add_node("grade", _grade_step)
+    builder.add_node("rewrite", _rewrite_step)
+    builder.add_node("generate", _generate_step)
+    builder.add_node("verify", _verify_step)
+
+    builder.add_edge(START, "retrieve")
+    builder.add_edge("retrieve", "grade")
+    builder.add_conditional_edges(
+        "grade",
+        _grade_router,
+        {"rewrite": "rewrite", "generate": "generate"},
+    )
+    builder.add_edge("rewrite", "retrieve")
+    builder.add_edge("generate", "verify")
+    builder.add_edge("verify", END)
+    return builder.compile()
+
+
 def run_corrective_rag(
     question: str,
     chat_history: list[ChatMessage],
     summary: str,
     store: RagStore | None = None,
+    document_id: str | None = None,
 ) -> str:
-    """Run the corrective-RAG graph for one /chat call and return the answer.
+    """Run the corrective-RAG graph for one chat call and return the answer.
 
-    The caller must provide the RagStore to search. The graph's retrieve and
-    rewrite nodes close over this store instance rather than reading the
-    module-global ``store``, so per-document flows (e.g. documents ask) can
-    scope retrieval to the correct document without affecting /prepare+/chat.
-    If *store* is None (back-compat), the module-global store is used.
+    If ``document_id`` is given (Stage 5 /documents ask), retrieval uses
+    pgvector filtered by that id (no RagStore, no FAISS). Otherwise falls
+    back to the RagStore path (v1 /prepare + /chat and legacy callers).
     """
-    effective_store: RagStore = store if store is not None else globals()["store"]  # fallback for legacy callers
-    graph = _build_chat_graph(effective_store)
+    if document_id is not None:
+        graph = _build_chat_graph_for_document(document_id)
+    else:
+        effective_store: RagStore = store if store is not None else globals()["store"]  # fallback for legacy callers
+        graph = _build_chat_graph(effective_store)
 
     initial: ChatState = {
         "question": question,
