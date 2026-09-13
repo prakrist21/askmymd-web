@@ -1,6 +1,7 @@
 """AskmyMD FastAPI entrypoint."""
 
 import logging
+from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
@@ -20,8 +21,24 @@ from app.routers import chat, documents, health, prepare
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("askmymd.startup")
 
-app = FastAPI(title="AskmyMD API")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Mirror tests/conftest.py: ensure pgvector extension + all tables exist
+    # so a fresh `createdb askmymd` works without manual psql steps.
+    try:
+        from app.db import _ensure_extension_and_tables
+
+        _ensure_extension_and_tables()
+        logger.info("DB startup: extension + tables ensured (askmymd)")
+    except Exception as e:
+        logger.warning("DB startup ensure failed: %s", e)
+    yield
+
+
+app = FastAPI(title="AskmyMD API", lifespan=lifespan)
 
 # Allow the Vite dev server origin (frontend) to call the backend.
 app.add_middleware(
