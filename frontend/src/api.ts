@@ -1,5 +1,10 @@
 const BACKEND_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
+/** Base URL of the backend, e.g. "http://localhost:8000". Exported so the
+ *  preview can resolve relative image paths (like /documents/{id}/images/{id})
+ *  against the same origin the API calls use. */
+export { BACKEND_URL };
+
 /** API error carrying the backend's machine-readable { error, code } shape. */
 export class ApiError extends Error {
   code: string;
@@ -149,6 +154,26 @@ export async function getDocumentHistory(documentId: string): Promise<{ messages
   try {
     res = await fetch(`${BACKEND_URL}/documents/${encodeURIComponent(documentId)}/history`, {
       headers: { ...authHeaders() },
+    });
+  } catch {
+    throw networkError();
+  }
+  if (!res.ok) throw await parseError(res);
+  return res.json();
+}
+
+export async function uploadImage(
+  documentId: string,
+  file: File
+): Promise<{ image_id: string }> {
+  let res: Response;
+  try {
+    const form = new FormData();
+    form.append("file", file);
+    res = await fetch(`${BACKEND_URL}/documents/${encodeURIComponent(documentId)}/images`, {
+      method: "POST",
+      headers: { ...authHeaders() }, // no Content-Type — the browser sets the multipart boundary
+      body: form,
     });
   } catch {
     throw networkError();

@@ -24,7 +24,7 @@ import {
   BookOpen,
   Check,
 } from "lucide-react";
-import { generateImageId, setImage } from "../imageStore";
+import { uploadImage, friendlyMessage } from "../api";
 import { EDITOR_FONTS, PREVIEW_FONTS } from "../fonts";
 
 interface FormattingToolbarProps {
@@ -36,6 +36,9 @@ interface FormattingToolbarProps {
   previewFontId: string;
   onEditorFontChange: (id: string) => void;
   onPreviewFontChange: (id: string) => void;
+  /** Ensures a backend document exists (create once, reuse after) and returns its id.
+   *  Used by image upload so images always have a document to attach to. */
+  onEnsureDocument?: () => Promise<string | null>;
 }
 
 export default function FormattingToolbar({
@@ -47,6 +50,7 @@ export default function FormattingToolbar({
   previewFontId,
   onEditorFontChange,
   onPreviewFontChange,
+  onEnsureDocument,
 }: FormattingToolbarProps) {
   const [headingOpen, setHeadingOpen] = useState(false);
   const [editorFontOpen, setEditorFontOpen] = useState(false);
@@ -59,7 +63,7 @@ export default function FormattingToolbar({
   const imageFileRef = useRef<HTMLInputElement>(null);
   const [pendingImageDataUrl, setPendingImageDataUrl] = useState<string | null>(null);
   const [imageWarning, setImageWarning] = useState<string | null>(null);
-  const [showImageComingSoon, setShowImageComingSoon] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   const [showTableModal, setShowTableModal] = useState(false);
   const [tableHover, setTableHover] = useState({ rows: 3, cols: 3 });
@@ -402,9 +406,50 @@ export default function FormattingToolbar({
   }
 
   function handleImage() {
-    // For now, image upload is coming soon
-    setShowImageComingSoon(true);
-    setTimeout(() => setShowImageComingSoon(false), 2000);
+    setShowImageModal(true);
+    setImageMode("choice");
+  }
+
+  /** Decode a data URL into a File so it can be sent as multipart. */
+  function dataUrlToFile(dataUrl: string, filename: string): File {
+    const [header, base64] = dataUrl.split(",");
+    const mime = header.match(/:(.*?);/)?.[1] ?? "image/png";
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new File([bytes], filename || "image", { type: mime });
+  }
+
+  async function handleInsertUploadedImage() {
+    if (!pendingImageDataUrl || uploadingImage) return;
+    const file = dataUrlToFile(pendingImageDataUrl, imageFileName || "image");
+    if (file.size > 5 * 1024 * 1024) {
+      setImageWarning("Image exceeds the 5 MB limit. Please choose a smaller image.");
+      return;
+    }
+    setImageWarning(null);
+    setUploadingImage(true);
+    try {
+      // Same pattern as resync: guarantee a backend document exists first
+      // (first-ever use creates one; later edits reuse the server-issued id).
+      const docId = await onEnsureDocument?.();
+      if (!docId) {
+        setImageWarning("Could not reach the server to register the document — image not inserted.");
+        return;
+      }
+      const { image_id } = await uploadImage(docId, file);
+      // The markdown keeps a short, portable path; Preview resolves it
+      // against the backend base URL at render time.
+      insertImageMarkdown(imageAlt || "image", `/documents/${docId}/images/${image_id}`);
+      setPendingImageDataUrl(null);
+      setImageFileName("");
+      setImageMode("choice");
+      setShowImageModal(false);
+    } catch (err) {
+      setImageWarning(friendlyMessage(err, "Image upload failed — please try again."));
+    } finally {
+      setUploadingImage(false);
+    }
   }
 
   function insertImageMarkdown(alt: string, url: string) {
@@ -501,12 +546,13 @@ export default function FormattingToolbar({
           dataUrl = compressed;
         }
         const finalBytes = Math.round((dataUrl.length * 3) / 4);
-        if (finalBytes > limit) {
+        const hardLimit = 5 * 1024 * 1024;
+        if (finalBytes > hardLimit) {
           setImageWarning(
-            `Image is large (${(finalBytes / 1024 / 1024).toFixed(1)} MB). It will be stored as base64 in the markdown and counts toward localStorage limits (~5 MB). Consider using a smaller image or a URL.`
+            `Image is too large (${(finalBytes / 1024 / 1024).toFixed(1)} MB). The maximum is 5 MB — please choose a smaller image.`
           );
         } else if (approxBytes > limit) {
-          setImageWarning(`Image was compressed from ${(approxBytes / 1024 / 1024).toFixed(1)} MB to ${(finalBytes / 1024 / 1024).toFixed(1)} MB to fit localStorage.`);
+          setImageWarning(`Image was compressed from ${(approxBytes / 1024 / 1024).toFixed(1)} MB to ${(finalBytes / 1024 / 1024).toFixed(1)} MB before upload.`);
         }
       } else {
         setImageWarning(null);
@@ -518,9 +564,6 @@ export default function FormattingToolbar({
   }
 
   function closeImageModal() {
-    if (pendingImageDataUrl && pendingImageDataUrl.startsWith("blob:")) {
-      URL.revokeObjectURL(pendingImageDataUrl);
-    }
     setPendingImageDataUrl(null);
     setImageFileName("");
     setImageWarning(null);
@@ -865,11 +908,7 @@ export default function FormattingToolbar({
         </div>
       </div>
 
-      {showImageComingSoon && (
-        <div className={`fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-md border px-4 py-2 text-sm shadow-lg ${isDark ? "border-slate-700 bg-slate-800 text-slate-100" : "border-gray-200 bg-white text-gray-900"}`}>
-          Image upload — Coming soon
-        </div>
-      )}
+
 
       {/* Image popup */}
       {showImageModal && (
@@ -933,25 +972,11 @@ export default function FormattingToolbar({
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (pendingImageDataUrl) {
-                        const id = generateImageId();
-                        setImage(id, pendingImageDataUrl);
-                        const placeholderUrl = `local:${id}`;
-                        insertImageMarkdown(imageAlt, placeholderUrl);
-                      } else {
-                        const url = imageFileName || "https://example.com/image.jpg";
-                        insertImageMarkdown(imageAlt, url);
-                      }
-                      setPendingImageDataUrl(null);
-                      setImageFileName("");
-                      setImageWarning(null);
-                      setImageMode("choice");
-                    }}
-                    disabled={!pendingImageDataUrl && !imageFileName}
+                    onClick={handleInsertUploadedImage}
+                    disabled={!pendingImageDataUrl || uploadingImage}
                     className="rounded-md bg-emerald-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-emerald-400 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    Insert
+                    {uploadingImage ? "Uploading…" : "Insert"}
                   </button>
                 </div>
               </div>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import ChatPanel from "./components/ChatPanel";
 import Editor from "./components/Editor";
 import FormattingToolbar from "./components/FormattingToolbar";
@@ -18,6 +18,7 @@ import {
   savePreviewFont,
   saveTheme,
 } from "./storage";
+import { createDocument } from "./api";
 import {
   DEFAULT_EDITOR_FONT_ID,
   DEFAULT_PREVIEW_FONT_ID,
@@ -86,6 +87,23 @@ export default function App() {
     setDocumentId(id);
   };
 
+  // Guarantees a backend document exists before attaching images: reuse the
+  // stored server-issued id when present (same identity model as resync),
+  // otherwise create the document once via createDocument(). Returns null on
+  // failure so the caller can show an error instead of a broken reference.
+  const ensureDocument = useCallback(async (): Promise<string | null> => {
+    const existing = documentId ?? loadStoredDocumentId();
+    if (existing) return existing;
+    try {
+      const created = await createDocument(markdown || "Untitled document");
+      saveDocumentId(created.document_id);
+      setDocumentId(created.document_id);
+      return created.document_id;
+    } catch {
+      return null;
+    }
+  }, [documentId, markdown]);
+
   // Escape closes the drawer.
   useEffect(() => {
     if (!drawerOpen) return;
@@ -116,6 +134,7 @@ export default function App() {
         previewFontId={previewFontId}
         onEditorFontChange={setEditorFontId}
         onPreviewFontChange={setPreviewFontId}
+        onEnsureDocument={ensureDocument}
       />
       {docError && (
         <div className={`flex items-center justify-between gap-3 border-b px-6 py-2 text-sm ${isDark ? "border-red-900/60 bg-red-950/60 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>

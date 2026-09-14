@@ -1,8 +1,8 @@
 """Postgres connection via SQLAlchemy 2.0 + psycopg (v3).
 
 Reads ``DATABASE_URL`` from the environment (loaded via ``python-dotenv``).
-No host/port/database is hardcoded — switching from local Postgres to Neon
-is a single env-var change.
+No host/port/database is hardcoded — switching between local Postgres and a
+hosted provider (Supabase/Neon) is a single env-var change.
 
 ``DATABASE_URL`` standard format:
     postgresql://user:pass@host:port/dbname
@@ -10,8 +10,8 @@ is a single env-var change.
 
 The ``postgresql://`` scheme is normalized to ``postgresql+psycopg://`` so
 SQLAlchemy uses the installed ``psycopg`` (v3) driver rather than looking
-for ``psycopg2``. Both forms are accepted so a Neon URL can be pasted
-verbatim.
+for ``psycopg2``. Both forms are accepted so a hosted-provider URL can be
+pasted verbatim.
 
 Setup prerequisite (once per database, before first table creation):
     CREATE EXTENSION IF NOT EXISTS vector;
@@ -45,9 +45,17 @@ def _normalize_url(url: str) -> str:
     (v3, ``psycopg[binary]``) so the ``+psycopg`` dialect must be explicit.
     Already-qualified URLs (``postgresql+psycopg://``, ``postgresql+asyncpg://``,
     etc.) are left untouched.
+
+    Supabase: if the host is ``*.supabase.co`` and no ``sslmode`` is present,
+    append ``sslmode=require`` — Supabase (both direct and pooler) requires
+    SSL with ``psycopg``. This keeps a verbatim copy-paste from the dashboard
+    working even if the user forgets to add the query param.
     """
     if url.startswith("postgresql://"):
-        return url.replace("postgresql://", "postgresql+psycopg://", 1)
+        url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+    # Auto-append sslmode=require for Supabase if missing
+    if "supabase.co" in url and "sslmode" not in url:
+        url += ("&" if "?" in url else "?") + "sslmode=require"
     return url
 
 
@@ -80,9 +88,19 @@ def get_engine() -> Engine | None:
     if url is None:
         return None
     normalized = _normalize_url(url)
+    # Supabase Transaction pooler (6543 + pgbouncer=true) doesn't support
+    # server-side prepared statements. psycopg/SQLAlchemy use them by
+    # default, which breaks with `prepared statement "..." does not exist`.
+    # Session pooler (5432) supports them normally. Only disable when
+    # transaction mode is detected.
+    connect_args = {}
+    if "pgbouncer=true" in normalized:
+        # psycopg3: prepare_threshold=None disables prepared statements
+        connect_args["prepare_threshold"] = None
     _engine = create_engine(
         normalized,
         pool_pre_ping=True,
+        connect_args=connect_args if connect_args else {},
     )
     _session_factory = sessionmaker(bind=_engine, autocommit=False, autoflush=False)
     return _engine

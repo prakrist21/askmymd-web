@@ -26,6 +26,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     func,
@@ -75,6 +76,32 @@ class Chunk(Base):
 
     __table_args__ = (
         Index("ix_chunks_document_id_chunk_index", "document_id", "chunk_index"),
+    )
+
+
+class Image(Base):
+    """Image binary stored in Postgres (bytea), scoped to one document.
+
+    Replaces the localStorage/base64-in-markdown approach: the markdown only
+    holds a short reference URL (``/documents/{id}/images/{image_id}``) and
+    the bytes live here. Deleting the document cascades to its images so no
+    orphan rows survive a delete.
+    """
+
+    __tablename__ = "images"
+
+    # Short unique id (12-char hex, same scheme as documents.id) that is
+    # safe to embed in markdown and unguessable enough for the unauthenticated
+    # GET endpoint.
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: uuid.uuid4().hex[:12])
+    document_id: Mapped[str] = mapped_column(
+        String, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    content_type: Mapped[str] = mapped_column(String, nullable=False)  # e.g. image/png
+    # Raw image bytes — Postgres BYTEA via SQLAlchemy LargeBinary.
+    data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
 

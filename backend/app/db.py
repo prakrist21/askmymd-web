@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Dict, List, Optional
 
 from sqlalchemy import text
@@ -99,7 +100,7 @@ def clear_all() -> None:
         return
     _ensure_extension_and_tables()
     with engine.begin() as conn:
-        conn.execute(text("TRUNCATE documents, chunks, chat_messages CASCADE"))
+        conn.execute(text("TRUNCATE documents, chunks, chat_messages, images CASCADE"))
 
 
 def create_document(owner_id: str, content: str, status: str = "ready") -> Document:
@@ -324,6 +325,53 @@ def ensure_chunks(document_id: str) -> int:
     if not chunks:
         return 0
     return insert_chunks(document_id, chunks)
+
+
+# ---------------------------------------------------------------------------
+# Image helpers — raw bytes in Postgres (bytea), scoped to a document
+# ---------------------------------------------------------------------------
+
+@dataclass
+class ImageRow:
+    id: str
+    document_id: str
+    content_type: str
+    data: bytes
+    created_at: Optional[datetime] = None
+
+
+def insert_image(document_id: str, content_type: str, data: bytes) -> str:
+    """Store an image's raw bytes for a document. Returns the short image id."""
+    if not data:
+        raise ValueError("cannot store an empty image")
+    engine = get_engine()
+    if engine is None:
+        raise RuntimeError("DATABASE_URL not set — cannot store images")
+    _ensure_extension_and_tables()
+    image_id = uuid.uuid4().hex[:12]
+    with Session(engine) as session:
+        row = db_models.Image(id=image_id, document_id=document_id, content_type=content_type, data=data)
+        session.add(row)
+        session.commit()
+        return image_id
+
+
+def get_image(image_id: str) -> Optional[ImageRow]:
+    """Return one image row (bytes included) or None."""
+    engine = get_engine()
+    if engine is None:
+        return None
+    with Session(engine) as session:
+        row = session.get(db_models.Image, image_id)
+        if row is None:
+            return None
+        return ImageRow(
+            id=row.id,
+            document_id=row.document_id,
+            content_type=row.content_type,
+            data=row.data,
+            created_at=row.created_at,
+        )
 
 
 # ---------------------------------------------------------------------------

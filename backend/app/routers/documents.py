@@ -1,4 +1,4 @@
-"""Document-scoped routes: resync, ask — Stage 5 pgvector only.
+"""Document-scoped routes: resync, ask, images — Stage 5 pgvector only.
 
 Stage 5: retrieval is ``SELECT ... FROM chunks WHERE document_id=:id
 ORDER BY embedding <=> :query_vec LIMIT k`` (k=5, k=7 for rewrite).
@@ -11,7 +11,7 @@ warning window via ``ensure_chunks``.
 
 import logging
 
-from fastapi import APIRouter, Depends, Path
+from fastapi import APIRouter, Depends, File, Path, Response, UploadFile
 
 from app.auth import CurrentUser, get_current_user
 from app.db import (
@@ -21,11 +21,21 @@ from app.db import (
     ensure_chunks,
     get_chunk_count,
     get_document,
+    get_image,
     insert_chunks,
     delete_chunks,
+    insert_image,
     update_document,
 )
-from app.errors import document_error, document_not_found, document_resyncing
+from app.errors import (
+    document_error,
+    document_not_found,
+    document_resyncing,
+    image_not_found,
+    image_too_large,
+    invalid_image_type,
+    resync_failed,
+)
 from app.models import ChatRequest, ChatResponse
 from app.services import rag_service
 
@@ -33,12 +43,44 @@ logger = logging.getLogger("askmymd.documents")
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
+# Upload cap. 5 MB is a sensible balance: it comfortably covers photos and
+# screenshots after browser-side compression (the toolbar already downscales
+# anything over ~2.5 MB), while keeping Postgres rows, WAL traffic, and
+# request bodies bounded. It also matches the kind of cap GitHub, Slack, and
+# Notion use for inline image uploads.
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+
+# Exact content types accepted. Sniffed from the bytes themselves — never
+# trusted from the client's Content-Type header, which is trivially spoofed.
+# Format: (magic bytes prefix, canonical content type, extension hint)
+_IMAGE_SIGNATURES = (
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"GIF87a", "image/gif"),
+    (b"GIF89a", "image/gif"),
+    (b"RIFF", "image/webp"),  # RIFF....WEBP — verified separately
+)
+
 
 def _get_document_or_404(document_id: str, user: CurrentUser) -> Document:
     doc = get_document(document_id)
     if not doc or doc.owner_id != user.id:
         raise document_not_found()
     return doc
+
+
+def _sniff_image_type(data: bytes) -> str:
+    """Return the canonical image content type based on magic bytes, or raise.
+
+    WebP is RIFF-based and needs its own check: bytes 0-3 are 'RIFF' and
+    bytes 8-11 are 'WEBP'.
+    """
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    for magic, content_type in _IMAGE_SIGNATURES:
+        if data.startswith(magic) and magic != b"RIFF":
+            return content_type
+    raise invalid_image_type()
 
 
 @router.post("")
@@ -201,3 +243,55 @@ async def resync_document(
         from app.errors import resync_failed
 
         raise resync_failed(str(exc))
+
+
+# ---------------------------------------------------------------------------
+# Images — upload (multipart) and serve raw bytes
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{document_id}/images")
+async def upload_image(
+    document_id: str = Path(...),
+    file: UploadFile = File(...),
+    user: CurrentUser = Depends(get_current_user),
+):
+    """Upload an image for a document; returns {"image_id": "<short id>"}.
+
+    The id is what the frontend embeds in markdown as
+    ![alt](/documents/{document_id}/images/{image_id}). Validation is by
+    content (magic bytes), not the client-declared Content-Type.
+    """
+    _get_document_or_404(document_id, user)
+
+    data = await file.read()
+    if len(data) > MAX_IMAGE_BYTES:
+        raise image_too_large()
+    if not data:
+        raise invalid_image_type()
+
+    sniffed = _sniff_image_type(data)
+    try:
+        image_id = insert_image(document_id, sniffed, data)
+    except Exception as e:
+        logger.warning("Image persist failed for doc %s: %s", document_id, e)
+        raise resync_failed(str(e))
+    logger.info("Stored image %s (%d bytes, %s) for doc %s", image_id, len(data), sniffed, document_id)
+    return {"image_id": image_id}
+
+
+@router.get("/{document_id}/images/{image_id}")
+async def get_image_endpoint(
+    document_id: str = Path(...),
+    image_id: str = Path(...),
+):
+    """Serve the raw image bytes with the correct Content-Type header.
+
+    Deliberately unauthenticated: it must work as a plain <img src>, and the
+    12-hex id is the capability token (same trust model as a shareable file
+    URL). 404 covers both 'document gone (cascade)' and 'bad id'.
+    """
+    row = get_image(image_id)
+    if row is None or row.document_id != document_id:
+        raise image_not_found()
+    return Response(content=row.data, media_type=row.content_type)

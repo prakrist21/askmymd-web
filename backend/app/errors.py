@@ -55,6 +55,18 @@ def resync_failed(msg: str = "Resync failed") -> AppError:
     return AppError(500, "RESYNC_FAILED", msg)
 
 
+def image_too_large() -> AppError:
+    return AppError(413, "IMAGE_TOO_LARGE", "Image exceeds the 5 MB limit")
+
+
+def invalid_image_type() -> AppError:
+    return AppError(400, "INVALID_IMAGE_TYPE", "Only PNG, JPEG, GIF or WebP images are allowed")
+
+
+def image_not_found() -> AppError:
+    return AppError(404, "IMAGE_NOT_FOUND", "Image not found")
+
+
 async def app_error_handler(_: Request, exc: AppError) -> JSONResponse:
     return JSONResponse(
         status_code=exc.status_code,

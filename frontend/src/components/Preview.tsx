@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { getImage } from "../imageStore";
+import { BACKEND_URL } from "../api";
 import { attachMermaidToolbar } from "./mermaidToolbar";
 // highlight.js-free by design: code blocks render plain on the dark card.
 // The dark variant (not the main entry) is deliberate: the main css resolves
@@ -385,11 +386,27 @@ function patchMindmapRoot(container: HTMLElement, isDark: boolean) {
   }
 }
 
+/** Amber "Image not found" card (ImageOff icon + message) replacing any
+ *  img that cannot be displayed: a legacy `local:` id with no stored data,
+ *  a deleted image, or an endpoint 404. */
+function makeImagePlaceholder(ref: string): HTMLDivElement {
+  const placeholder = document.createElement("div");
+  placeholder.style.cssText =
+    "display:flex; align-items:center; gap:0.5rem; padding:0.75rem; border:1px dashed #f59e0b; background:#fef3c7; color:#92400e; border-radius:6px; margin:0.75rem 0; font-size:0.875rem; font-family:'Inter',sans-serif;";
+  placeholder.innerHTML =
+    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path><line x1="2" y1="2" x2="22" y2="22"></line></svg><span>Image not found: ' +
+    ref.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;") +
+    " — re-upload to restore</span>";
+  return placeholder;
+}
+
 function resolveLocalImages(container: HTMLElement) {
   const imgs = Array.from(container.querySelectorAll("img"));
   imgs.forEach((img) => {
     const src = img.getAttribute("src") || "";
     if (src.startsWith("local:")) {
+      // Legacy (pre-Postgres) reference: resolve from the localStorage image
+      // store; missing ids keep getting the placeholder.
       const id = src.slice(6);
       const dataUrl = getImage(id);
       if (dataUrl) {
@@ -397,16 +414,26 @@ function resolveLocalImages(container: HTMLElement) {
         // Also update src property for immediate display
         (img as HTMLImageElement).src = dataUrl;
       } else {
-        const placeholder = document.createElement("div");
-        placeholder.style.cssText =
-          "display:flex; align-items:center; gap:0.5rem; padding:0.75rem; border:1px dashed #f59e0b; background:#fef3c7; color:#92400e; border-radius:6px; margin:0.75rem 0; font-size:0.875rem; font-family:'Inter',sans-serif;";
-        placeholder.innerHTML =
-          '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="9" cy="9" r="2"></circle><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"></path><line x1="2" y1="2" x2="22" y2="22"></line></svg><span>Image not found: ' +
-          id.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;") +
-          " — re-upload to restore</span>";
-        img.replaceWith(placeholder);
+        img.replaceWith(makeImagePlaceholder(id));
       }
+    } else if (src.startsWith("/documents/")) {
+      // Relative path written into the markdown by the image uploader.
+      // Resolve against the backend origin so it loads in dev (frontend
+      // :5173, backend :8000) and in any deployment using VITE_API_URL.
+      const absolute = `${BACKEND_URL}${src}`;
+      img.setAttribute("src", absolute);
+      (img as HTMLImageElement).src = absolute;
     }
+    // Any image that still fails to load (404 from the endpoint, deleted
+    // document, dead external URL) gets the same placeholder via onerror.
+    // Valid images are untouched — this fires only on genuine failures.
+    img.addEventListener(
+      "error",
+      () => {
+        img.replaceWith(makeImagePlaceholder(src || "(empty src)"));
+      },
+      { once: true }
+    );
   });
 }
 
