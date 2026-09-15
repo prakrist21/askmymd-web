@@ -1,5 +1,5 @@
 fastapi==0.115.14
-uvicorn[standard]==0.34.3
+uvicorn[standard]==0.52.4
 python-dotenv==1.1.1
 sentence-transformers==6.0.1
 langchain-groq==1.1.3
