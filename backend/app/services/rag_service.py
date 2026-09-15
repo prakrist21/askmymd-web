@@ -1,17 +1,14 @@
-"""RAG backend: markdown chunking, FAISS vector store, retrieval, and the
-LangGraph corrective-RAG flow used by /chat.
+"""RAG backend: markdown chunking and LangGraph corrective-RAG flow.
 
-Phase 3 scope: chunk + embed into an in-memory FAISS index held in module
-state (single active document, no session id). Phase 5 layers the LangGraph
-corrective-RAG flow on top of `retrieve()`.
+Post-cleanup: FAISS / RagStore removed — pgvector is the only retrieval
+truth. Chunking stays here; embedding is via sentence-transformers;
+retrieval is via app.db.search_chunks (pgvector).
 """
 
 import logging
 import re
 from typing import TypedDict
 
-import faiss
-import numpy as np
 from langgraph.graph import END, START, StateGraph
 from sentence_transformers import SentenceTransformer
 
@@ -75,47 +72,7 @@ def chunk_markdown(content: str) -> list[str]:
     return chunks
 
 
-class RagStore:
-    """In-memory FAISS store for the single active document."""
-
-    def __init__(self) -> None:
-        self.index: faiss.Index | None = None
-        self.chunks: list[str] = []
-        self.summary: str = ""
-
-    def build(self, chunks: list[str], summary: str) -> int:
-        """Embed chunks into a fresh FAISS index. Returns the chunk count."""
-        if not chunks:
-            raise ValueError("cannot build a store from zero chunks")
-        vectors = _get_embedder().encode(
-            chunks, batch_size=32, show_progress_bar=False, normalize_embeddings=True
-        )
-        matrix = np.asarray(vectors, dtype="float32")
-        index = faiss.IndexFlatIP(matrix.shape[1])  # cosine sim via inner product
-        index.add(matrix)
-        self.index = index
-        self.chunks = list(chunks)
-        self.summary = summary
-        logger.info("FAISS store built: %d chunks, dim %d", len(chunks), matrix.shape[1])
-        return len(self.chunks)
-
-    def retrieve(self, query: str, k: int = TOP_K) -> list[str]:
-        """Return the top-k chunks most similar to the query."""
-        if self.index is None or not self.chunks:
-            raise ValueError("store is empty — call /prepare first")
-        query_vec = np.asarray(
-            _get_embedder().encode([query], show_progress_bar=False, normalize_embeddings=True),
-            dtype="float32",
-        )
-        scores, ids = self.index.search(query_vec, min(k, len(self.chunks)))
-        return [self.chunks[i] for i in ids[0] if 0 <= i < len(self.chunks)]
-
-
-# Single active document for the whole app (v1: no session ids).
-store = RagStore()
-
-
-# --- LangGraph corrective-RAG flow (Phase 5) -------------------------------
+# --- LangGraph corrective-RAG flow ---------------------------------------
 
 MAX_CORRECTIONS = 1  # one rewrite + re-retrieve round at most
 
@@ -189,62 +146,12 @@ def _verify_step(state: ChatState) -> dict:
     return {"answer": fallback}
 
 
-def _build_chat_graph(active_store: RagStore) -> object:
-    """retrieve -> grade -> (rewrite -> retrieve -> grade) -> generate -> verify.
-
-    The graph closes over *active_store* instead of the module-global ``store``,
-    so callers can thread a per-document RagStore through the retrieval nodes.
-    Used by v1 /prepare + /chat (global in-memory FAISS). Stage 5 document
-    retrieval uses _build_chat_graph_for_document (pgvector) instead.
-    """
-
-    def _retrieve_step(state: ChatState) -> dict:
-        """Retrieve top-5 chunks from the caller-provided store."""
-        chunks = active_store.retrieve(state["query"])
-        logger.info("Retrieve: %d chunks for query %r", len(chunks), state["query"][:80])
-        return {"chunks": chunks}
-
-    def _rewrite_step(state: ChatState) -> dict:
-        """Rewrite the query (history-aware) and re-retrieve with a bigger pool."""
-        query = llm_service.rewrite_query(
-            state["question"], state["chat_history"], state["summary"]
-        )
-        logger.info(
-            "Correction round %d: re-retrieving with rewritten query",
-            state["corrections"] + 1,
-        )
-        return {
-            "query": query,
-            "chunks": active_store.retrieve(query, k=TOP_K + 2),
-            "corrections": state["corrections"] + 1,
-        }
-
-    builder = StateGraph(ChatState)
-    builder.add_node("retrieve", _retrieve_step)
-    builder.add_node("grade", _grade_step)
-    builder.add_node("rewrite", _rewrite_step)
-    builder.add_node("generate", _generate_step)
-    builder.add_node("verify", _verify_step)
-
-    builder.add_edge(START, "retrieve")
-    builder.add_edge("retrieve", "grade")
-    builder.add_conditional_edges(
-        "grade",
-        _grade_router,
-        {"rewrite": "rewrite", "generate": "generate"},
-    )
-    builder.add_edge("rewrite", "retrieve")
-    builder.add_edge("generate", "verify")
-    builder.add_edge("verify", END)
-    return builder.compile()
-
-
 def _build_chat_graph_for_document(document_id: str) -> object:
-    """Stage 5: pgvector retrieval filtered by document_id.
+    """Pgvector retrieval filtered by document_id.
 
-    Replaces the FAISS store closure. ``_retrieve_step`` now does
+    ``_retrieve_step`` does
     ``SELECT content FROM chunks WHERE document_id=:id ORDER BY embedding <=> :query_vec LIMIT k``
-    so isolation is enforced by SQL, not by which RagStore object is passed.
+    so isolation is enforced by SQL.
     k=5 normally, k=7 (TOP_K+2) for the rewrite path (both the rewrite's
     immediate fetch and the following retrieve after rewrite).
     """
@@ -298,20 +205,13 @@ def run_corrective_rag(
     question: str,
     chat_history: list[ChatMessage],
     summary: str,
-    store: RagStore | None = None,
-    document_id: str | None = None,
+    document_id: str,
 ) -> str:
     """Run the corrective-RAG graph for one chat call and return the answer.
 
-    If ``document_id`` is given (Stage 5 /documents ask), retrieval uses
-    pgvector filtered by that id (no RagStore, no FAISS). Otherwise falls
-    back to the RagStore path (v1 /prepare + /chat and legacy callers).
+    Retrieval uses pgvector filtered by ``document_id``.
     """
-    if document_id is not None:
-        graph = _build_chat_graph_for_document(document_id)
-    else:
-        effective_store: RagStore = store if store is not None else globals()["store"]  # fallback for legacy callers
-        graph = _build_chat_graph(effective_store)
+    graph = _build_chat_graph_for_document(document_id)
 
     initial: ChatState = {
         "question": question,

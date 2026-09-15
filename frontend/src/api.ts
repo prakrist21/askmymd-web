@@ -65,41 +65,6 @@ export async function checkHealth(): Promise<{ status: string }> {
   return res.json();
 }
 
-export async function prepareDocument(
-  markdownContent: string
-): Promise<{ ready: boolean }> {
-  let res: Response;
-  try {
-    res = await fetch(`${BACKEND_URL}/prepare`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ markdown_content: markdownContent }),
-    });
-  } catch {
-    throw networkError();
-  }
-  if (!res.ok) throw await parseError(res);
-  return res.json();
-}
-
-export async function sendChatMessage(
-  question: string,
-  chatHistory: { role: string; content: string }[]
-): Promise<{ answer: string }> {
-  let res: Response;
-  try {
-    res = await fetch(`${BACKEND_URL}/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question, chat_history: chatHistory }),
-    });
-  } catch {
-    throw networkError();
-  }
-  if (!res.ok) throw await parseError(res);
-  return res.json();
-}
-
 function authHeaders(): Record<string, string> {
   // Simple demo auth — backend expects Bearer <user_id>.
   // In production this would be a real JWT; for the demo we use a stable id

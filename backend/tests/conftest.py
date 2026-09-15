@@ -1,16 +1,12 @@
-"""Stage 3/6: force all tests to use a dedicated test DB and start empty.
+"""Force all tests to use a dedicated test DB and start empty.
 
 - Tests must NEVER touch dev data. Default: the local isolated DB
   `askmymd_test` on localhost (create once with `createdb askmymd_test`).
 - Optional override: set `TEST_DATABASE_URL` (or `SUPABASE_TEST_DATABASE_URL`)
-  to a separate hosted test project (e.g. a second Supabase project's Session
-  pooler URI). That value wins over the local default.
+  to a separate hosted test project.
 
 - Ensures vector extension + tables exist.
-- TRUNCATEs documents/chunks/chat_messages BEFORE and AFTER each test so
-  leftover rows from a failed/interrupted run can never bleed into the next.
-- Also clears in-memory FAISS stores (document_stores + legacy global store)
-  and chroma_store so retrieval isolation tests remain deterministic.
+- TRUNCATEs documents/chunks/chat_messages BEFORE and AFTER each test.
 """
 
 from __future__ import annotations
@@ -32,7 +28,6 @@ from sqlalchemy import text
 
 from app.database import get_engine, Base
 import app.db_models  # ensure tables registered
-from app.services import rag_service
 
 
 @pytest.fixture(autouse=True)
@@ -64,16 +59,9 @@ def db_isolation():
     # Hard truncate BEFORE test — kills leftovers from a crashed prior run
     with engine.begin() as conn:
         conn.execute(text("TRUNCATE documents, chunks, chat_messages, images CASCADE"))
-    # Stage 5: FAISS per-doc stores removed; only global v1 store remains
-    rag_service.store.index = None
-    rag_service.store.chunks = []
-    rag_service.store.summary = ""
 
     yield
 
     # Truncate AFTER test — normal isolation
     with engine.begin() as conn:
         conn.execute(text("TRUNCATE documents, chunks, chat_messages, images CASCADE"))
-    rag_service.store.index = None
-    rag_service.store.chunks = []
-    rag_service.store.summary = ""

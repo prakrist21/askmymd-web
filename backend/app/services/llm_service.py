@@ -28,11 +28,16 @@ _llm: ChatGroq | None = None
 
 
 def _get_llm() -> ChatGroq:
-    """Lazy singleton so importing this module never fails without a key."""
+    """Lazy singleton so importing this module never fails without a key.
+
+    Validation: key must be at least 20 chars and start with ``gsk_``.
+    This is tighter than the previous ``your_`` prefix check and rejects
+    rotated/placeholder keys that are too short or malformed.
+    """
     global _llm
     if _llm is None:
         api_key = os.getenv("GROQ_API_KEY")
-        if not api_key or api_key.startswith("your_"):
+        if not api_key or len(api_key) < 20 or not api_key.startswith("gsk_"):
             raise llm_unavailable("configure the LLM")
         _llm = ChatGroq(api_key=api_key, model=MODEL_NAME)
     return _llm

@@ -16,7 +16,7 @@ from app.errors import (
     unhandled_error_handler,
     validation_error_handler,
 )
-from app.routers import chat, documents, health, prepare
+from app.routers import documents, health
 
 load_dotenv()
 
@@ -55,8 +55,6 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
-app.include_router(prepare.router)
-app.include_router(chat.router)
 app.include_router(documents.router)
 
 # Domain errors, malformed bodies, and anything unexpected all share the

@@ -21,6 +21,7 @@ from app.db import (
     ensure_chunks,
     get_chunk_count,
     get_document,
+    get_owned_document,
     get_image,
     insert_chunks,
     delete_chunks,
@@ -36,7 +37,7 @@ from app.errors import (
     invalid_image_type,
     resync_failed,
 )
-from app.models import ChatRequest, ChatResponse
+from app.models import ChatRequest, ChatResponse, CreateDocumentRequest
 from app.services import rag_service
 
 logger = logging.getLogger("askmymd.documents")
@@ -63,8 +64,9 @@ _IMAGE_SIGNATURES = (
 
 
 def _get_document_or_404(document_id: str, user: CurrentUser) -> Document:
-    doc = get_document(document_id)
-    if not doc or doc.owner_id != user.id:
+    # Filter at query level — ownership enforced by DB, not fetch-then-compare
+    doc = get_owned_document(document_id, user.id)
+    if not doc:
         raise document_not_found()
     return doc
 
@@ -85,7 +87,7 @@ def _sniff_image_type(data: bytes) -> str:
 
 @router.post("")
 async def create_document(
-    body: dict,
+    body: CreateDocumentRequest,
     user: CurrentUser = Depends(get_current_user),
 ):
     """Create a document for the authenticated user. Helper for tests and UI.
@@ -94,7 +96,7 @@ async def create_document(
     Stage 5: chunks are embedded and inserted into pgvector. Failures are
     now loud — the document is marked error instead of warning-only.
     """
-    content = body.get("content", "")
+    content = body.content
     doc = db_create_document(owner_id=user.id, content=content, status="ready")
     doc_id = doc.id
 
@@ -121,14 +123,13 @@ async def create_document(
                 try:
                     insert_chunks(doc_id, chunks)
                     logger.info("Persisted %d chunks to DB for doc %s (pgvector)", len(chunks), doc_id)
-                except Exception as e:
-                    logger.warning("DB chunk persist failed for doc %s: %s (failing request)", doc_id, e)
+                except Exception:
+                    logger.exception("DB chunk persist failed for doc %s", doc_id)
                     update_document(doc_id, status="error")
                     doc.status = "error"
-                    # Surface as 500 so caller knows persistence failed
                     from app.errors import resync_failed
 
-                    raise resync_failed(str(e))
+                    raise resync_failed()
         except Exception as e:
             # resync_failed already raised above will propagate; this catches chunking failures
             if isinstance(e, Exception) and "RESYNC" in str(type(e)):
@@ -231,8 +232,8 @@ async def resync_document(
         doc.status = "ready"
         return {"document_id": document_id, "status": "ready", "chunks": len(chunks), "archived": archived_count}
 
-    except Exception as exc:
-        logger.exception("Resync failed for doc %s: %s", document_id, exc)
+    except Exception:
+        logger.exception("Resync failed for doc %s", document_id)
         update_document(document_id, status="error")
         doc.status = "error"
         # Purge any partially inserted chunks (delete again to leave clean)
@@ -242,7 +243,7 @@ async def resync_document(
             pass
         from app.errors import resync_failed
 
-        raise resync_failed(str(exc))
+        raise resync_failed()
 
 
 # ---------------------------------------------------------------------------
@@ -264,18 +265,26 @@ async def upload_image(
     """
     _get_document_or_404(document_id, user)
 
-    data = await file.read()
-    if len(data) > MAX_IMAGE_BYTES:
-        raise image_too_large()
+    # Stream and check size before loading full file into memory
+    data = bytearray()
+    chunk_size = 8192
+    while True:
+        chunk = await file.read(chunk_size)
+        if not chunk:
+            break
+        if len(data) + len(chunk) > MAX_IMAGE_BYTES:
+            raise image_too_large()
+        data.extend(chunk)
     if not data:
         raise invalid_image_type()
+    data = bytes(data)
 
     sniffed = _sniff_image_type(data)
     try:
         image_id = insert_image(document_id, sniffed, data)
-    except Exception as e:
-        logger.warning("Image persist failed for doc %s: %s", document_id, e)
-        raise resync_failed(str(e))
+    except Exception:
+        logger.exception("Image persist failed for doc %s", document_id)
+        raise resync_failed()
     logger.info("Stored image %s (%d bytes, %s) for doc %s", image_id, len(data), sniffed, document_id)
     return {"image_id": image_id}
 
@@ -287,9 +296,16 @@ async def get_image_endpoint(
 ):
     """Serve the raw image bytes with the correct Content-Type header.
 
-    Deliberately unauthenticated: it must work as a plain <img src>, and the
-    12-hex id is the capability token (same trust model as a shareable file
-    URL). 404 covers both 'document gone (cascade)' and 'bad id'.
+    Intentionally unauthenticated capability URL — no ownership check.
+    The 12-hex ``image_id`` is the secret capability token (same trust model
+    as a shareable file URL) so the endpoint works as a plain ``<img src>``
+    without auth headers. 404 covers both 'document gone (cascade)' and 'bad id'.
+
+    Security note: this is deliberate for demo/personal use (see SECURITY.md
+    and the header-based auth notice). For production, consider replacing with
+    short-lived signed URLs (e.g. HMAC + expiry) or requiring an
+    ``Authorization`` header and serving images via authenticated fetch → blob
+    URL, so knowledge of the ID alone is not sufficient indefinitely.
     """
     row = get_image(image_id)
     if row is None or row.document_id != document_id:

@@ -25,3 +25,10 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
+
+
+class CreateDocumentRequest(BaseModel):
+    """POST /documents body — content is the markdown document."""
+
+    content: str = Field(min_length=1, max_length=50000)
+    title: str | None = Field(default=None, max_length=200)

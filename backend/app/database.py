@@ -4,6 +4,9 @@ Reads ``DATABASE_URL`` from the environment (loaded via ``python-dotenv``).
 No host/port/database is hardcoded — switching between local Postgres and a
 hosted provider (Supabase/Neon) is a single env-var change.
 
+``DATABASE_URL`` is required at startup. ``get_engine()`` raises
+``RuntimeError`` only if it is missing or empty.
+
 ``DATABASE_URL`` standard format:
     postgresql://user:pass@host:port/dbname
     postgresql+psycopg://user:pass@host:port/dbname  (also accepted)
@@ -73,20 +76,17 @@ _engine: Engine | None = None
 _session_factory: sessionmaker[Session] | None = None
 
 
-def get_engine() -> Engine | None:
+def get_engine() -> Engine:
     """Return the SQLAlchemy Engine, creating it on first call.
 
-    Returns ``None`` when ``DATABASE_URL`` is not set so the app can still
-    be imported and the v1 ``/prepare`` + ``/chat`` in-memory path keeps
-    working without a database. Callers that require the DB should raise a
-    clear error when this returns ``None``.
+    Raises ``RuntimeError`` only if ``DATABASE_URL`` is missing or empty.
     """
     global _engine, _session_factory
     if _engine is not None:
         return _engine
     url = get_database_url()
     if url is None:
-        return None
+        raise RuntimeError("DATABASE_URL is not set")
     normalized = _normalize_url(url)
     # Supabase Transaction pooler (6543 + pgbouncer=true) doesn't support
     # server-side prepared statements. psycopg/SQLAlchemy use them by
@@ -106,13 +106,13 @@ def get_engine() -> Engine | None:
     return _engine
 
 
-def get_session_factory() -> sessionmaker[Session] | None:
-    """Return the sessionmaker bound to the current engine, or ``None``."""
+def get_session_factory() -> sessionmaker[Session]:
+    """Return the sessionmaker bound to the current engine."""
     # Ensure engine is initialized first.
     if _session_factory is not None:
         return _session_factory
-    if get_engine() is None:
-        return None
+    get_engine()
+    assert _session_factory is not None
     return _session_factory
 
 
@@ -126,12 +126,6 @@ def get_db() -> Generator[Session, None, None]:
     Raises a 500-style error if ``DATABASE_URL`` is not configured.
     """
     factory = get_session_factory()
-    if factory is None:
-        raise RuntimeError(
-            "DATABASE_URL is not set — configure it to use Postgres/pgvector. "
-            "Example: postgresql://user:pass@host:port/dbname "
-            "(and run CREATE EXTENSION IF NOT EXISTS vector; once per database)"
-        )
     db = factory()
     try:
         yield db
@@ -141,8 +135,9 @@ def get_db() -> Generator[Session, None, None]:
 
 def ping_db() -> bool:
     """Return True if the database is reachable (SELECT 1 succeeds)."""
-    engine = get_engine()
-    if engine is None:
+    try:
+        engine = get_engine()
+    except RuntimeError:
         return False
     try:
         with engine.connect() as conn:
@@ -155,5 +150,9 @@ def ping_db() -> bool:
 # Convenience alias so `from app.database import engine` still works for
 # verification scripts that expect an ``engine`` attribute at import time.
 # This does NOT connect — it is lazily created on first access via
-# ``get_engine()``. Accessing ``engine`` when DATABASE_URL is unset gives None.
-engine: Engine | None = get_engine()
+# ``get_engine()``. If DATABASE_URL is unset/placeholder at import time,
+# ``engine`` is None and the lifespan in main.py will surface the error.
+try:
+    engine: Engine | None = get_engine()
+except RuntimeError:
+    engine = None  # type: ignore[assignment]
