@@ -9,7 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "dompurify": "3.4.15",
+    "dompurify": "3.4.17",
     "github-markdown-css": "5.9.0",
     "lucide-react": "1.43.0",
     "marked": "18.0.12",
